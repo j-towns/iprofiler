@@ -64,9 +64,15 @@ class IProfile(DOMWidget):
     def generate_content(self, fun):
         # Generate page for a particular function fun
         self.html_value = html.HTML()
+        self.generate_heading(fun)
         self.generate_table(fun)
         if self.lprofile is not None:
             self.generate_lprofile(fun)
+
+    def generate_heading(self, fun):
+        self.html_value.h3(fun.co_name)
+        if fun.co_filename != "":
+            self.html_value.p("From: " + fun.co_filename)
 
     def generate_table(self, fun):
         """
