@@ -14,7 +14,7 @@ class IProfile(DOMWidget):
     def __init__(self, cprofile, lprofile=None, *args, **kwargs):
         self.generate_cprofile_tree(cprofile)
         self.lprofile = lprofile
-        self.generate_content(self.roots[0])
+        self.generate_content()
         self.value = str(self.html_value)
         self.on_msg(self.handle_on_msg)
 
@@ -61,17 +61,25 @@ class IProfile(DOMWidget):
     # Dictionary mapping html id's to function names
     id_dict = {}
 
-    def generate_content(self, fun):
+    def generate_content(self, fun=None):
         # Generate page for a particular function fun
         self.html_value = html.HTML()
         self.generate_heading(fun)
         self.generate_table(fun)
-        if self.lprofile is not None:
+        if self.lprofile is not None and fun is not None:
             self.generate_lprofile(fun)
 
     def generate_heading(self, fun):
+        if fun is None:
+            self.html_value.h3("Summary")
+            return
+
         try:
-            self.html_value.h3(fun.co_name)
+            heading = "{} (Calls: {}, Time: {})"
+            heading = heading.format(fun.co_name,
+                                     self.cprofile_tree[fun]['callcount'],
+                                     self.cprofile_tree[fun]['totaltime'])
+            self.html_value.h3(heading)
             self.html_value.p("From: " + fun.co_filename)
         except AttributeError:
             self.html_value.h3(fun)
@@ -85,7 +93,10 @@ class IProfile(DOMWidget):
         h = table.thead().tr()
         h.th("Function")
         h.th("Total time (seconds)")
-        args = [function for function in self.cprofile_tree[fun]['calls']]
+        if fun is None:
+            args = self.cprofile_tree.keys()
+        else:
+            args = [function for function in self.cprofile_tree[fun]['calls']]
         # Sort by total time (descending)
         args.sort(key=lambda x: self.cprofile_tree[x]['totaltime'])
         args.reverse()
@@ -111,7 +122,6 @@ class IProfile(DOMWidget):
             firstlineno = fun.co_firstlineno
             name = fun.co_name
         except AttributeError:
-            print "fun not a code object"
             return
 
         ltimings_key = (filename, firstlineno, name)
@@ -119,7 +129,6 @@ class IProfile(DOMWidget):
         try:
             ltimings = self.lprofile.timings[ltimings_key]
         except KeyError:
-            print "fun not profiled by lprofiler"
             return
 
         raw_code = ""
