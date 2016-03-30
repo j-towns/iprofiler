@@ -70,9 +70,11 @@ class IProfile(DOMWidget):
             self.generate_lprofile(fun)
 
     def generate_heading(self, fun):
-        self.html_value.h3(fun.co_name)
-        if fun.co_filename != "":
+        try:
+            self.html_value.h3(fun.co_name)
             self.html_value.p("From: " + fun.co_filename)
+        except AttributeError:
+            self.html_value.h3(fun)
 
     def generate_table(self, fun):
         """
@@ -109,6 +111,7 @@ class IProfile(DOMWidget):
             firstlineno = fun.co_firstlineno
             name = fun.co_name
         except AttributeError:
+            print "fun not a code object"
             return
 
         ltimings_key = (filename, firstlineno, name)
@@ -116,6 +119,7 @@ class IProfile(DOMWidget):
         try:
             ltimings = self.lprofile.timings[ltimings_key]
         except KeyError:
+            print "fun not profiled by lprofiler"
             return
 
         raw_code = ""
