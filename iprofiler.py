@@ -185,7 +185,7 @@ class IProfile(DOMWidget):
         # zipped packages.
         filename = ltimings[-1]
         del ltimings[-1]
-        print filename
+        
         if filename.endswith(('.pyc', '.pyo')):
             filename = openpy.source_from_cache(filename)
         if ".egg/" in filename:
