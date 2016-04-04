@@ -1,5 +1,4 @@
 import html
-from IPython.core.ultratb import findsource
 from IPython.utils import openpy
 from IPython.utils import ulinecache
 from IPython.core.magic import (Magics, magics_class, line_magic,
@@ -12,8 +11,6 @@ from pygments import highlight
 from pygments.lexers import PythonLexer
 from pygments.formatters import HtmlFormatter
 
-import linecache
-import inspect
 import zipfile
 import sys
 
@@ -43,8 +40,8 @@ else:
 # ============================================================
 
 class IProfile(DOMWidget):
-    def __init__(self, cprofile, lprofile=None, *args, **kwargs):
-        self.generate_cprofile_tree(cprofile)
+    def __init__(self, cprofile, lprofile=None, context=None, *args, **kwargs):
+        self.generate_cprofile_tree(cprofile, context)
         self.lprofile = lprofile
         self.generate_content()
         self.value = str(self.html_value)
@@ -52,7 +49,7 @@ class IProfile(DOMWidget):
 
         super(IProfile, self).__init__(value=self.value)
 
-    def generate_cprofile_tree(self, cprofile):
+    def generate_cprofile_tree(self, cprofile, context=None):
         self.cprofile_tree = {}
         for entry in cprofile:
             function = entry[0]
@@ -82,6 +79,20 @@ class IProfile(DOMWidget):
             if n == 0:
                 self.roots.append(i)
 
+        self.delete_top_level(context)
+
+    def delete_top_level(self, context=None):
+        """
+        Delete the top level calls which are not part of the user's code.
+        """
+        if context is "LINE_MAGIC":
+            junk_calls = self.roots
+            tree = self.cprofile_tree
+            junk_calls.append(tree[junk_calls[0]]['calls'].keys()[0])
+            junk_calls.append(tree[junk_calls[-1]]['calls'].keys()[0])
+            for junk_call in junk_calls:
+                del self.cprofile_tree[junk_call]
+
     _view_name = Unicode('IProfileView').tag(sync=True)
 
     # This trait is the actual html displayed in the widget
@@ -94,7 +105,8 @@ class IProfile(DOMWidget):
     id_dict = {}
 
     def generate_content(self, fun=None):
-        # Generate page for a particular function fun
+        """Generate profile page for function fun. If fun=None then generate
+        a summary page."""
         self.html_value = html.HTML()
         self.generate_heading(fun)
         self.generate_table(fun)
@@ -102,6 +114,7 @@ class IProfile(DOMWidget):
             self.generate_lprofile(fun)
 
     def generate_heading(self, fun):
+        """Generate a heading for the top of the iprofile."""
         if fun is None:
             self.html_value.h3("Summary")
             return
@@ -149,6 +162,10 @@ class IProfile(DOMWidget):
             self.id_dict["function" + str(i)] = arg
 
     def generate_lprofile(self, fun):
+        """
+        Generate div containing profiled source code with timings of each line,
+        taken from iline_profiler.
+        """
         try:
             filename = fun.co_filename
             firstlineno = fun.co_firstlineno
@@ -168,7 +185,7 @@ class IProfile(DOMWidget):
         # zipped packages.
         filename = ltimings[-1]
         del ltimings[-1]
-
+        print filename
         if filename.endswith(('.pyc', '.pyo')):
             filename = openpy.source_from_cache(filename)
         if ".egg/" in filename:
@@ -184,6 +201,9 @@ class IProfile(DOMWidget):
         self.html_value += highlight(raw_code, PythonLexer(), formatter)
 
     def handle_on_msg(self, _, content, buffers):
+        """
+        Handler for click (and potentially other) events from the user.
+        """
         clicked_fun = self.id_dict[content]
         self.generate_content(clicked_fun)
 
@@ -194,7 +214,7 @@ def add_zipped_file_to_linecache(filename):
     zipped_filename += extension[:-1]
     assert zipfile.is_zipfile(zipped_filename)
     zipped_file = zipfile.ZipFile(zipped_filename)
-    linecache.cache[filename] = (None, None,
+    ulinecache.cache[filename] = (None, None,
                                  zipped_file.open(inner, 'r').readlines())
     zipped_file.close()
 
@@ -251,9 +271,11 @@ class IProfilerMagics(Magics):
         lprofile = lprofiler.get_stats()
         cprofile = cprofiler.getstats()
 
+        iprofile = IProfile(cprofile, lprofile, context="LINE_MAGIC")
+
         # Note this name *could* clash with a user defined name...
         # Should find a better solution
-        self.shell.user_ns['_IPROFILE'] = IProfile(cprofile, lprofile)
+        self.shell.user_ns['_IPROFILE'] = iprofile
         self.shell.run_cell('_IPROFILE')
 
 
