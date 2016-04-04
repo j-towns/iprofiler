@@ -1,4 +1,9 @@
 import html
+from IPython.core.ultratb import findsource
+from IPython.utils import openpy
+from IPython.utils import ulinecache
+from IPython.core.magic import (Magics, magics_class, line_magic,
+                                cell_magic, line_cell_magic)
 from ipywidgets import DOMWidget
 from traitlets import Unicode, Int
 from ipywidgets.widgets.widget import CallbackDispatcher, register
@@ -8,7 +13,34 @@ from pygments.lexers import PythonLexer
 from pygments.formatters import HtmlFormatter
 
 import linecache
+import inspect
+import zipfile
+import sys
 
+
+# Python 2/3 compatibility utils
+# ===========================================================
+PY3 = sys.version_info[0] == 3
+
+# exec (from https://bitbucket.org/gutworth/six/):
+if PY3:
+    import builtins
+    exec_ = getattr(builtins, "exec")
+    del builtins
+else:
+    def exec_(_code_, _globs_=None, _locs_=None):
+        """Execute code in a namespace."""
+        if _globs_ is None:
+            frame = sys._getframe(1)
+            _globs_ = frame.f_globals
+            if _locs_ is None:
+                _locs_ = frame.f_locals
+            del frame
+        elif _locs_ is None:
+            _locs_ = _globs_
+        exec("""exec _code_ in _globs_, _locs_""")
+
+# ============================================================
 
 class IProfile(DOMWidget):
     def __init__(self, cprofile, lprofile=None, *args, **kwargs):
@@ -131,10 +163,22 @@ class IProfile(DOMWidget):
         except KeyError:
             return
 
+        # Currently the correct filename is stored at the end of ltimings.
+        # This is a work-around to fix cProfiler giving useless filenames for
+        # zipped packages.
+        filename = ltimings[-1]
+        del ltimings[-1]
+
+        if filename.endswith(('.pyc', '.pyo')):
+            filename = openpy.source_from_cache(filename)
+        if ".egg/" in filename:
+            add_zipped_file_to_linecache(filename)
+
         raw_code = ""
         linenos = range(firstlineno, ltimings[-1][0] + 1)
+
         for lineno in linenos:
-            raw_code += linecache.getline(fun.co_filename, lineno)
+            raw_code += ulinecache.getline(filename, lineno)
 
         formatter = LProfileFormatter(firstlineno, ltimings, noclasses=True)
         self.html_value += highlight(raw_code, PythonLexer(), formatter)
@@ -144,6 +188,16 @@ class IProfile(DOMWidget):
         self.generate_content(clicked_fun)
 
         self.value = str(self.html_value)
+
+def add_zipped_file_to_linecache(filename):
+    (zipped_filename, extension, inner) = filename.partition('.egg/')
+    zipped_filename += extension[:-1]
+    assert zipfile.is_zipfile(zipped_filename)
+    zipped_file = zipfile.ZipFile(zipped_filename)
+    linecache.cache[filename] = (None, None,
+                                 zipped_file.open(inner, 'r').readlines())
+    zipped_file.close()
+
 
 class LProfileFormatter(HtmlFormatter):
 
@@ -157,8 +211,12 @@ class LProfileFormatter(HtmlFormatter):
                      self).wrap(self._wrap_code(source), outfile)
 
     def _wrap_code(self, source):
-        template = '{:>8} {:>6} {:>4} {}'
-        yield 0, template.format('Time', 'Calls', '<strong>Code</strong>', '\n')
+        head_template = '{} {} {}'
+        no_time_template = '{:6} {:7} {:>4} {}'
+        template = '{:06.2f} {:>7} {:>4} {}'
+        time = '<span style=\'color: Red; font-weight: bold\'>Time</span>   '
+        yield 0, head_template.format(time, ' Calls',
+                                      ' <strong>Code</strong>\n')
         # j keeps track of position within ltimings
         j = 0
         for i, line in source:
@@ -169,5 +227,40 @@ class LProfileFormatter(HtmlFormatter):
                 yield i, template.format(ltime, lcalls, lineno, line)
                 j += 1
             else:
-                yield i, template.format('', '', lineno, line)
+                yield i, no_time_template.format('', '', lineno, line)
             self.lineno += 1
+
+@magics_class
+class IProfilerMagics(Magics):
+    @line_magic
+    def iprofile(self, line):
+        import _iline_profiler
+        import cProfile
+        cprofiler = cProfile.Profile()
+        lprofiler = _iline_profiler.LineProfiler()
+
+        global_ns = self.shell.user_global_ns
+        local_ns = self.shell.user_ns
+
+        lprofiler.enable()
+        cprofiler.enable()
+        exec_(line, global_ns, local_ns)
+        cprofiler.disable()
+        lprofiler.disable()
+
+        lprofile = lprofiler.get_stats()
+        cprofile = cprofiler.getstats()
+
+        # Note this name *could* clash with a user defined name...
+        # Should find a better solution
+        self.shell.user_ns['_IPROFILE'] = IProfile(cprofile, lprofile)
+        self.shell.run_cell('_IPROFILE')
+
+
+def load_ipython_extension(shell):
+    shell.register_magics(IProfilerMagics)
+    cell = """%%javascript
+require(["base/js/utils"], function(utils){
+    utils.load_extensions('iprofiler');
+});"""
+    shell.run_cell(cell)
