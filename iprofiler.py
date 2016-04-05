@@ -84,14 +84,43 @@ class IProfile(DOMWidget):
     def delete_top_level(self, context=None):
         """
         Delete the top level calls which are not part of the user's code.
+
+        If CELL_MAGIC then also merge the entries for the cell (which are
+        seperated by line into individual code objects...)
         """
-        if context is "LINE_MAGIC":
+        if context == "LINE_MAGIC":
             junk_calls = self.roots
             tree = self.cprofile_tree
             junk_calls.append(tree[junk_calls[0]]['calls'].keys()[0])
             junk_calls.append(tree[junk_calls[-1]]['calls'].keys()[0])
             for junk_call in junk_calls:
                 del self.cprofile_tree[junk_call]
+
+        if context == "CELL_MAGIC":
+            # Find the root nodes that we want
+            new_roots = []
+            for function in self.cprofile_tree:
+                try:
+                    if "<ipython-input" in function.co_filename:
+                        new_roots += self.cprofile_tree[function]['calls']
+                except AttributeError:
+                    pass
+
+            # Populate a new tree with everything below roots in the original
+            # tree.
+            new_cprofile_tree = {}
+            def populate_new_tree(roots):
+                for root in roots:
+                    if root not in new_cprofile_tree:
+                        new_cprofile_tree[root] = self.cprofile_tree[root]
+                        populate_new_tree(self.cprofile_tree[root]['calls'])
+
+            populate_new_tree(new_roots)
+            self.cprofile_tree = new_cprofile_tree
+            self.roots = new_roots
+
+
+
 
     _view_name = Unicode('IProfileView').tag(sync=True)
 
@@ -184,15 +213,14 @@ class IProfile(DOMWidget):
         # This is a work-around to fix cProfiler giving useless filenames for
         # zipped packages.
         filename = ltimings[-1]
-        del ltimings[-1]
-        
+
         if filename.endswith(('.pyc', '.pyo')):
             filename = openpy.source_from_cache(filename)
         if ".egg/" in filename:
             add_zipped_file_to_linecache(filename)
 
         raw_code = ""
-        linenos = range(firstlineno, ltimings[-1][0] + 1)
+        linenos = range(firstlineno, ltimings[-2][0] + 1)
 
         for lineno in linenos:
             raw_code += ulinecache.getline(filename, lineno)
@@ -252,32 +280,49 @@ class LProfileFormatter(HtmlFormatter):
 
 @magics_class
 class IProfilerMagics(Magics):
-    @line_magic
-    def iprofile(self, line):
+    @line_cell_magic
+    def iprofile(self, line, cell=None):
         import _iline_profiler
         import cProfile
         cprofiler = cProfile.Profile()
         lprofiler = _iline_profiler.LineProfiler()
 
-        global_ns = self.shell.user_global_ns
-        local_ns = self.shell.user_ns
+        if cell is None:
+            # LINE MAGIC
+            global_ns = self.shell.user_global_ns
+            local_ns = self.shell.user_ns
 
-        lprofiler.enable()
-        cprofiler.enable()
-        exec_(line, global_ns, local_ns)
-        cprofiler.disable()
-        lprofiler.disable()
+            lprofiler.enable()
+            cprofiler.enable()
+            exec_(line, global_ns, local_ns)
+            cprofiler.disable()
+            lprofiler.disable()
 
-        lprofile = lprofiler.get_stats()
-        cprofile = cprofiler.getstats()
+            lprofile = lprofiler.get_stats()
+            cprofile = cprofiler.getstats()
 
-        iprofile = IProfile(cprofile, lprofile, context="LINE_MAGIC")
+            iprofile = IProfile(cprofile, lprofile, context="LINE_MAGIC")
 
-        # Note this name *could* clash with a user defined name...
-        # Should find a better solution
-        self.shell.user_ns['_IPROFILE'] = iprofile
-        self.shell.run_cell('_IPROFILE')
+            # Note this name *could* clash with a user defined name...
+            # Should find a better solution
+            self.shell.user_ns['_IPROFILE'] = iprofile
+            self.shell.run_cell('_IPROFILE')
+        else:
+            lprofiler.enable()
+            cprofiler.enable()
+            self.shell.run_cell(cell)
+            cprofiler.disable()
+            lprofiler.disable()
 
+            lprofile = lprofiler.get_stats()
+            cprofile = cprofiler.getstats()
+
+            iprofile = IProfile(cprofile, lprofile, context='CELL_MAGIC')
+
+            # Note this name *could* clash with a user defined name...
+            # Should find a better solution
+            self.shell.user_ns['_IPROFILE'] = iprofile
+            self.shell.run_cell('_IPROFILE')
 
 def load_ipython_extension(shell):
     shell.register_magics(IProfilerMagics)
