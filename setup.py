@@ -1,5 +1,8 @@
 #!/usr/bin/env python
 
+# Monkey-patch distutils
+import setuptools
+
 from distutils.core import setup, Extension, Command
 from distutils.command.build_py import build_py
 
@@ -44,7 +47,8 @@ setup(name='IProfiler',
       author='James Townsend',
       author_email='jamiehntownsend@gmail.com',
       url='https://github.com/j-towns/iprofiler',
-      ext_modules = [
+      install_requires=['html', 'cython'],
+      ext_modules=[
           Extension('_iline_profiler',
                     sources=[line_profiler_source, 'line_profiler/timers.c', 'line_profiler/unset_trace.c'],
                     depends=['python25.pxd'],
