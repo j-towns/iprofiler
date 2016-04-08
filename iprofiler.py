@@ -242,7 +242,7 @@ def add_zipped_file_to_linecache(filename):
     zipped_filename += extension[:-1]
     assert zipfile.is_zipfile(zipped_filename)
     zipped_file = zipfile.ZipFile(zipped_filename)
-    ulinecache.cache[filename] = (None, None,
+    ulinecache.linecache.cache[filename] = (None, None,
                                  zipped_file.open(inner, 'r').readlines())
     zipped_file.close()
 
