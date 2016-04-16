@@ -14,6 +14,13 @@ from pygments.formatters import HtmlFormatter
 import zipfile
 import sys
 
+from bokeh.charts import Bar
+from bokeh.embed import notebook_div
+from bokeh.charts.attributes import CatAttr
+import bokeh.models.widgets.tables as bokeh_tables
+from bokeh.models import ColumnDataSource
+from bokeh.util.notebook import load_notebook
+from bokeh.io import show
 
 # Python 2/3 compatibility utils
 # ===========================================================
@@ -41,6 +48,9 @@ else:
 
 class IProfile(DOMWidget):
     def __init__(self, cprofile, lprofile=None, context=None, *args, **kwargs):
+        # Initiate bokeh
+        load_notebook(hide_banner=True)
+
         self.generate_cprofile_tree(cprofile, context)
         self.lprofile = lprofile
         self.generate_content()
@@ -119,9 +129,6 @@ class IProfile(DOMWidget):
             self.cprofile_tree = new_cprofile_tree
             self.roots = new_roots
 
-
-
-
     _view_name = Unicode('IProfileView').tag(sync=True)
 
     # This trait is the actual html displayed in the widget
@@ -163,32 +170,80 @@ class IProfile(DOMWidget):
         Generate a table displaying the functions called by fun and their
         respective running times.
         """
-        table = self.html_value.table()
-        h = table.thead().tr()
-        h.th("Function")
-        h.th("Total time (seconds)")
+        # table = self.html_value.table()
+        # h = table.thead().tr()
+        # h.th("Function")
+        # h.th("Total time (seconds)")
         if fun is None:
-            args = self.cprofile_tree.keys()
+            # Generate summary page
+            calls = self.cprofile_tree.keys()
         else:
-            args = [function for function in self.cprofile_tree[fun]['calls']]
-        # Sort by total time (descending)
-        args.sort(key=lambda x: self.cprofile_tree[x]['totaltime'])
-        args.reverse()
+            calls = [function for function in self.cprofile_tree[fun]['calls']]
 
-        for i in range(len(args)):
-            arg = args[i]
-            r = table.tr()
-            # Function name
+        names = list()
+        for call in calls:
             try:
-                name = arg.co_name
+                names.append(str(call.co_name))
             except AttributeError:
-                name = arg
-            r.td.a(name, id="function" + str(i))
+                names.append(str(call))
 
-            # Total time spent in function
-            r.td(str(self.cprofile_tree[arg]['totaltime']))
-            self.n_table_elements += 1
-            self.id_dict["function" + str(i)] = arg
+        # List of tuples containing names and corresponding times
+        calls = zip(range(len(calls)), names,
+                    [self.cprofile_tree[x]['totaltime'] for x in calls],
+                    calls)
+
+        self.id_dict = {"function" + str(id): cprofile_key for
+                        (id, name, time, cprofile_key) in calls}
+        # Sort by total time (descending)
+        calls.sort(key=lambda x: x[2])
+        calls.reverse()
+
+        self.n_table_elements = len(calls)
+
+
+        # for i, (name, time, cprofile_key) in enumerate(calls):
+        #     r = table.tr()
+        #
+        #     r.td.a(name, id="function" + str(i))
+        #
+        #     # Total time spent in function
+        #     r.td(str(time))
+        #     self.n_table_elements += 1
+        #     self.id_dict["function" + str(i)] = cprofile_key
+
+        # Generate bokeh table
+        try:
+            ids, names, times = zip(*calls)[:-1]
+        except ValueError:
+            return
+        table_data = dict(ids=ids, names=names, times=times)
+        table_data = ColumnDataSource(table_data)
+
+        time_formatter = bokeh_tables.NumberFormatter(format='0,0.000')
+        name_formatter = bokeh_tables.HTMLTemplateFormatter(
+        template='<a id="function<%= ids %>"><%- names %></a>'
+        )
+
+        columns = [
+        bokeh_tables.TableColumn(title="Function",
+                                 field="names",
+                                 formatter=name_formatter),
+        bokeh_tables.TableColumn(title="Total time (s)",
+                                 field="times",
+                                 formatter=time_formatter,
+                                 default_sort="descending")
+        ]
+        bokeh_table = bokeh_tables.DataTable(source=table_data,
+                                             columns=columns,
+                                             height='auto',
+                                             selectable=False)
+
+        #plot = Bar(chart_data, values='times', label=CatAttr(columns=['names'],
+        #                                                     sort=False),
+        #           toolbar_location=None, ylabel='Time (s)')
+
+        self.html_value += notebook_div(bokeh_table)
+        # show(plot)
 
     def generate_lprofile(self, fun):
         """
