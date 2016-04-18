@@ -14,7 +14,7 @@ def install_js(command, strict=False):
     class DecoratedCommand(command):
         def run(self):
             import notebook.nbextensions
-            notebook.nbextensions.install_nbextension('iprofiler.js',
+            notebook.nbextensions.install_nbextension('./js/iprofiler',
                                                       user=True)
             command.run(self)
             update_package_data(self.distribution)

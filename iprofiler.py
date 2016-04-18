@@ -376,6 +376,6 @@ def load_ipython_extension(shell):
     shell.register_magics(IProfilerMagics)
     cell = """%%javascript
 require(["base/js/utils"], function(utils){
-    utils.load_extensions('iprofiler');
+    utils.load_extensions('iprofiler/iprofiler');
 });"""
     shell.run_cell(cell)
