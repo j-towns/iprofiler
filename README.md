@@ -1,7 +1,9 @@
 # iprofiler
 Interactive code profiling widget for IPython + Jupyter Notebook.
 
-Only tested with Jupyter notebook server 4.1.0, Python 2.7.10, IPython 4.1.2, may be compatible with earlier/later versions.
+Only tested with Jupyter notebook server 4.1.0 and 4.2.0, Python 2.7.10, IPython 4.1.2, may be compatible with earlier/later versions.
+
+Appears to be broken for Python 3 because of the html module. Will find a work-around ASAP.
 
 ## Dependencies
 + Ipython/Jupyter

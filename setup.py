@@ -3,8 +3,12 @@
 # Monkey-patch distutils
 import setuptools
 
+import os
+from warnings import warn
+
 from distutils.core import setup, Extension, Command
 from distutils.command.build_py import build_py
+import distutils
 
 
 def install_js(command, strict=False):
@@ -14,7 +18,7 @@ def install_js(command, strict=False):
     class DecoratedCommand(command):
         def run(self):
             import notebook.nbextensions
-            notebook.nbextensions.install_nbextension('iprofiler.js',
+            notebook.nbextensions.install_nbextension('./js/iprofiler',
                                                       user=True)
             command.run(self)
             update_package_data(self.distribution)
@@ -38,7 +42,7 @@ except ImportError:
         raise distutils.errors.DistutilsError("""\
 You need Cython to build the line_profiler.""")
     else:
-        warn("Could not import Cython. "
+        raise ("Could not import Cython. "
              "Using the available pre-generated C file.")
 
 setup(name='IProfiler',
@@ -47,7 +51,7 @@ setup(name='IProfiler',
       author='James Townsend',
       author_email='jamiehntownsend@gmail.com',
       url='https://github.com/j-towns/iprofiler',
-      install_requires=['html', 'cython'],
+      install_requires=['html', 'cython', 'bokeh'],
       ext_modules=[
           Extension('_iline_profiler',
                     sources=[line_profiler_source, 'line_profiler/timers.c', 'line_profiler/unset_trace.c'],

@@ -3,6 +3,7 @@ from IPython.utils import openpy
 from IPython.utils import ulinecache
 from IPython.core.magic import (Magics, magics_class, line_magic,
                                 cell_magic, line_cell_magic)
+
 from ipywidgets import DOMWidget
 from traitlets import Unicode, Int
 from ipywidgets.widgets.widget import CallbackDispatcher, register
@@ -14,6 +15,13 @@ from pygments.formatters import HtmlFormatter
 import zipfile
 import sys
 
+from bokeh.charts import Bar
+from bokeh.embed import notebook_div
+from bokeh.charts.attributes import CatAttr
+import bokeh.models.widgets.tables as bokeh_tables
+from bokeh.models import ColumnDataSource
+from bokeh.util.notebook import load_notebook
+from bokeh.io import show, vform
 
 # Python 2/3 compatibility utils
 # ===========================================================
@@ -75,8 +83,8 @@ class IProfile(DOMWidget):
                 callcounts[call] += 1
 
         self.roots = []
-        for (i, n) in callcounts.iteritems():
-            if n == 0:
+        for i in callcounts:
+            if callcounts[i] == 0:
                 self.roots.append(i)
 
         self.delete_top_level(context)
@@ -89,12 +97,23 @@ class IProfile(DOMWidget):
         seperated by line into individual code objects...)
         """
         if context == "LINE_MAGIC":
-            junk_calls = self.roots
-            tree = self.cprofile_tree
-            junk_calls.append(tree[junk_calls[0]]['calls'].keys()[0])
-            junk_calls.append(tree[junk_calls[-1]]['calls'].keys()[0])
-            for junk_call in junk_calls:
-                del self.cprofile_tree[junk_call]
+            # Find the root nodes that we want
+            new_roots = []
+            for function in self.cprofile_tree:
+                try:
+                    if function.co_name == "<module>":
+                        new_roots += self.cprofile_tree[function]['calls']
+                except AttributeError:
+                    pass
+            # Remove function from new_roots if its child is already in
+            # new_roots
+            for i in range(len(new_roots)):
+                function = new_roots[i]
+                try:
+                    if function.co_name == "<module>":
+                        del new_roots[i]
+                except AttributeError:
+                    pass
 
         if context == "CELL_MAGIC":
             # Find the root nodes that we want
@@ -106,21 +125,18 @@ class IProfile(DOMWidget):
                 except AttributeError:
                     pass
 
-            # Populate a new tree with everything below roots in the original
-            # tree.
-            new_cprofile_tree = {}
-            def populate_new_tree(roots):
-                for root in roots:
-                    if root not in new_cprofile_tree:
-                        new_cprofile_tree[root] = self.cprofile_tree[root]
-                        populate_new_tree(self.cprofile_tree[root]['calls'])
+        # Populate a new tree with everything below roots in the original
+        # tree.
+        new_cprofile_tree = {}
+        def populate_new_tree(roots):
+            for root in roots:
+                if root not in new_cprofile_tree:
+                    new_cprofile_tree[root] = self.cprofile_tree[root]
+                    populate_new_tree(self.cprofile_tree[root]['calls'])
 
-            populate_new_tree(new_roots)
-            self.cprofile_tree = new_cprofile_tree
-            self.roots = new_roots
-
-
-
+        populate_new_tree(new_roots)
+        self.cprofile_tree = new_cprofile_tree
+        self.roots = new_roots
 
     _view_name = Unicode('IProfileView').tag(sync=True)
 
@@ -163,32 +179,90 @@ class IProfile(DOMWidget):
         Generate a table displaying the functions called by fun and their
         respective running times.
         """
-        table = self.html_value.table()
-        h = table.thead().tr()
-        h.th("Function")
-        h.th("Total time (seconds)")
         if fun is None:
-            args = self.cprofile_tree.keys()
+            # Generate summary page
+            calls = self.cprofile_tree.keys()
         else:
-            args = [function for function in self.cprofile_tree[fun]['calls']]
-        # Sort by total time (descending)
-        args.sort(key=lambda x: self.cprofile_tree[x]['totaltime'])
-        args.reverse()
+            calls = [function for function in self.cprofile_tree[fun]['calls']]
 
-        for i in range(len(args)):
-            arg = args[i]
-            r = table.tr()
-            # Function name
+        names = list()
+        for call in calls:
             try:
-                name = arg.co_name
+                names.append(str(call.co_name))
             except AttributeError:
-                name = arg
-            r.td.a(name, id="function" + str(i))
+                names.append(str(call))
 
-            # Total time spent in function
-            r.td(str(self.cprofile_tree[arg]['totaltime']))
-            self.n_table_elements += 1
-            self.id_dict["function" + str(i)] = arg
+        # List of tuples containing:
+        # (id number, name, totaltime, inlinetime, cprofile_key)
+        calls = zip(range(len(calls)), names,
+                    (self.cprofile_tree[x]['totaltime'] for x in calls),
+                    (self.cprofile_tree[x]['inlinetime'] for x in calls),
+                    calls)
+
+        self.id_dict = {"function" + str(id): cprofile_key for
+                        (id, name, time, inlinetime, cprofile_key) in calls}
+        self.n_table_elements = len(calls)
+
+        # Sort by total time (descending)
+        calls.sort(key=lambda x: x[2])
+        calls.reverse()
+
+        # Generate bokeh table
+        try:
+            ids, names, times, inlinetimes = zip(*calls)[:-1]
+        except ValueError:
+            return
+
+        time_plot_multiplier = 100 / max(times)
+        plot_inline_times = [time_plot_multiplier * time for time in
+                              inlinetimes]
+        plot_extra_times = [time_plot_multiplier * (totaltime - inlinetime)
+                            for totaltime, inlinetime in zip(times,
+                                                             inlinetimes)]
+
+        table_data = dict(ids=ids, names=names, times=times,
+                          inlinetimes=inlinetimes,
+                          plot_inline_times=plot_inline_times,
+                          plot_extra_times=plot_extra_times)
+
+        table_data = ColumnDataSource(table_data)
+
+        time_formatter = bokeh_tables.NumberFormatter(format='0,0.00000')
+        name_formatter = bokeh_tables.HTMLTemplateFormatter(
+        template='<a id="function<%= ids %>"><%- names %></a>'
+        )
+        time_plot_html_template='<img src="/nbextensions/iprofiler/red.gif" height="10" width="<%= plot_inline_times %>"><img src="/nbextensions/iprofiler/pink.gif" height="10" width="<%= plot_extra_times %>">'
+        time_plot_formatter = bokeh_tables.HTMLTemplateFormatter(
+        template=time_plot_html_template
+        )
+
+        columns = [
+        bokeh_tables.TableColumn(title="Function",
+                                 field="names",
+                                 formatter=name_formatter),
+        bokeh_tables.TableColumn(title="Total time (s)",
+                                 field="times",
+                                 formatter=time_formatter,
+                                 default_sort="descending"),
+        bokeh_tables.TableColumn(title="Inline time (s)",
+                                 field="inlinetimes",
+                                 formatter=time_formatter,
+                                 default_sort="descending"),
+        bokeh_tables.TableColumn(title="Time plot",
+                                 formatter=time_plot_formatter)
+        ]
+
+        bokeh_table = bokeh_tables.DataTable(source=table_data,
+                                             columns=columns,
+                                             # Would be nice if width could
+                                             # be automatic but this appears
+                                             # to be broken in firefox and
+                                             # chrome.
+                                             width=620,
+                                             height='auto',
+                                             selectable=False)
+
+        self.html_value += notebook_div(bokeh_table)
 
     def generate_lprofile(self, fun):
         """
@@ -261,7 +335,7 @@ class LProfileFormatter(HtmlFormatter):
     def _wrap_code(self, source):
         head_template = '{} {} {}'
         no_time_template = '{:6} {:7} {:>4} {}'
-        template = '{:06.2f} {:>7} {:>4} {}'
+        template = '<span style=\'color: Red\'>{:06.2f}</span> {:>7} {:>4} {}'
         time = '<span style=\'color: Red; font-weight: bold\'>Time</span>   '
         yield 0, head_template.format(time, ' Calls',
                                       ' <strong>Code</strong>\n')
@@ -325,9 +399,11 @@ class IProfilerMagics(Magics):
             self.shell.run_cell('_IPROFILE')
 
 def load_ipython_extension(shell):
+    # Initiate bokeh
+    load_notebook(hide_banner=True)
     shell.register_magics(IProfilerMagics)
     cell = """%%javascript
 require(["base/js/utils"], function(utils){
-    utils.load_extensions('iprofiler');
+    utils.load_extensions('iprofiler/iprofiler');
 });"""
     shell.run_cell(cell)
