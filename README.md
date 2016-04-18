@@ -8,6 +8,7 @@ Appears to be broken for Python 3 because of the html module. Will find a work-a
 ## Dependencies
 + Ipython/Jupyter
 + html module (see [here](https://pypi.python.org/pypi/html/1.16))
++ Bokeh
 
 ## Installation
 `pip install --user git+https://github.com/j-towns/iprofiler`
