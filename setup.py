@@ -3,8 +3,12 @@
 # Monkey-patch distutils
 import setuptools
 
+import os
+from warnings import warn
+
 from distutils.core import setup, Extension, Command
 from distutils.command.build_py import build_py
+import distutils
 
 
 def install_js(command, strict=False):
@@ -38,7 +42,7 @@ except ImportError:
         raise distutils.errors.DistutilsError("""\
 You need Cython to build the line_profiler.""")
     else:
-        warn("Could not import Cython. "
+        raise ("Could not import Cython. "
              "Using the available pre-generated C file.")
 
 setup(name='IProfiler',
