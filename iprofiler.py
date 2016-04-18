@@ -3,6 +3,7 @@ from IPython.utils import openpy
 from IPython.utils import ulinecache
 from IPython.core.magic import (Magics, magics_class, line_magic,
                                 cell_magic, line_cell_magic)
+
 from ipywidgets import DOMWidget
 from traitlets import Unicode, Int
 from ipywidgets.widgets.widget import CallbackDispatcher, register
@@ -20,7 +21,7 @@ from bokeh.charts.attributes import CatAttr
 import bokeh.models.widgets.tables as bokeh_tables
 from bokeh.models import ColumnDataSource
 from bokeh.util.notebook import load_notebook
-from bokeh.io import show
+from bokeh.io import show, vform
 
 # Python 2/3 compatibility utils
 # ===========================================================
@@ -48,9 +49,6 @@ else:
 
 class IProfile(DOMWidget):
     def __init__(self, cprofile, lprofile=None, context=None, *args, **kwargs):
-        # Initiate bokeh
-        load_notebook(hide_banner=True)
-
         self.generate_cprofile_tree(cprofile, context)
         self.lprofile = lprofile
         self.generate_content()
@@ -170,10 +168,6 @@ class IProfile(DOMWidget):
         Generate a table displaying the functions called by fun and their
         respective running times.
         """
-        # table = self.html_value.table()
-        # h = table.thead().tr()
-        # h.th("Function")
-        # h.th("Total time (seconds)")
         if fun is None:
             # Generate summary page
             calls = self.cprofile_tree.keys()
@@ -187,36 +181,28 @@ class IProfile(DOMWidget):
             except AttributeError:
                 names.append(str(call))
 
-        # List of tuples containing names and corresponding times
+        # List of tuples containing:
+        # (id number, name, totaltime, inlinetime, cprofile_key)
         calls = zip(range(len(calls)), names,
-                    [self.cprofile_tree[x]['totaltime'] for x in calls],
+                    (self.cprofile_tree[x]['totaltime'] for x in calls),
+                    (self.cprofile_tree[x]['inlinetime'] for x in calls),
                     calls)
 
         self.id_dict = {"function" + str(id): cprofile_key for
-                        (id, name, time, cprofile_key) in calls}
+                        (id, name, time, inlinetime, cprofile_key) in calls}
+        self.n_table_elements = len(calls)
+
         # Sort by total time (descending)
         calls.sort(key=lambda x: x[2])
         calls.reverse()
 
-        self.n_table_elements = len(calls)
-
-
-        # for i, (name, time, cprofile_key) in enumerate(calls):
-        #     r = table.tr()
-        #
-        #     r.td.a(name, id="function" + str(i))
-        #
-        #     # Total time spent in function
-        #     r.td(str(time))
-        #     self.n_table_elements += 1
-        #     self.id_dict["function" + str(i)] = cprofile_key
-
         # Generate bokeh table
         try:
-            ids, names, times = zip(*calls)[:-1]
+            ids, names, times, inlinetimes = zip(*calls)[:-1]
         except ValueError:
             return
-        table_data = dict(ids=ids, names=names, times=times)
+        table_data = dict(ids=ids, names=names, times=times,
+                          inlinetimes=inlinetimes)
         table_data = ColumnDataSource(table_data)
 
         time_formatter = bokeh_tables.NumberFormatter(format='0,0.000')
@@ -231,19 +217,24 @@ class IProfile(DOMWidget):
         bokeh_tables.TableColumn(title="Total time (s)",
                                  field="times",
                                  formatter=time_formatter,
+                                 default_sort="descending"),
+        bokeh_tables.TableColumn(title="Inline time (s)",
+                                 field="inlinetimes",
+                                 formatter=time_formatter,
                                  default_sort="descending")
         ]
+
         bokeh_table = bokeh_tables.DataTable(source=table_data,
                                              columns=columns,
+                                             # Would be nice if width could
+                                             # be automatic but this appears
+                                             # to be broken in firefox and
+                                             # chrome.
+                                             width=620,
                                              height='auto',
                                              selectable=False)
 
-        #plot = Bar(chart_data, values='times', label=CatAttr(columns=['names'],
-        #                                                     sort=False),
-        #           toolbar_location=None, ylabel='Time (s)')
-
         self.html_value += notebook_div(bokeh_table)
-        # show(plot)
 
     def generate_lprofile(self, fun):
         """
@@ -316,7 +307,7 @@ class LProfileFormatter(HtmlFormatter):
     def _wrap_code(self, source):
         head_template = '{} {} {}'
         no_time_template = '{:6} {:7} {:>4} {}'
-        template = '{:06.2f} {:>7} {:>4} {}'
+        template = '<span style=\'color: Red\'>{:06.2f}</span> {:>7} {:>4} {}'
         time = '<span style=\'color: Red; font-weight: bold\'>Time</span>   '
         yield 0, head_template.format(time, ' Calls',
                                       ' <strong>Code</strong>\n')
@@ -380,6 +371,8 @@ class IProfilerMagics(Magics):
             self.shell.run_cell('_IPROFILE')
 
 def load_ipython_extension(shell):
+    # Initiate bokeh
+    load_notebook(hide_banner=True)
     shell.register_magics(IProfilerMagics)
     cell = """%%javascript
 require(["base/js/utils"], function(utils){
