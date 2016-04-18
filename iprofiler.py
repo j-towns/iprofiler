@@ -1,4 +1,3 @@
-import html
 from IPython.utils import openpy
 from IPython.utils import ulinecache
 from IPython.core.magic import (Magics, magics_class, line_magic,
@@ -32,6 +31,7 @@ if PY3:
     import builtins
     exec_ = getattr(builtins, "exec")
     del builtins
+    from html import escape as html_escape
 else:
     def exec_(_code_, _globs_=None, _locs_=None):
         """Execute code in a namespace."""
@@ -44,6 +44,7 @@ else:
         elif _locs_ is None:
             _locs_ = _globs_
         exec("""exec _code_ in _globs_, _locs_""")
+    from cgi import escape as html_escape
 
 # ============================================================
 
@@ -51,8 +52,9 @@ class IProfile(DOMWidget):
     def __init__(self, cprofile, lprofile=None, context=None, *args, **kwargs):
         self.generate_cprofile_tree(cprofile, context)
         self.lprofile = lprofile
+        self.value_cache = ""
         self.generate_content()
-        self.value = str(self.html_value)
+        self.value = self.value_cache
         self.on_msg(self.handle_on_msg)
 
         super(IProfile, self).__init__(value=self.value)
@@ -152,7 +154,8 @@ class IProfile(DOMWidget):
     def generate_content(self, fun=None):
         """Generate profile page for function fun. If fun=None then generate
         a summary page."""
-        self.html_value = html.HTML()
+        # self.html_value = html.HTML()
+        self.value_cache = ""
         self.generate_heading(fun)
         self.generate_table(fun)
         if self.lprofile is not None and fun is not None:
@@ -161,7 +164,7 @@ class IProfile(DOMWidget):
     def generate_heading(self, fun):
         """Generate a heading for the top of the iprofile."""
         if fun is None:
-            self.html_value.h3("Summary")
+            self.value_cache += "<h3>Summary</h3>"
             return
 
         try:
@@ -169,10 +172,12 @@ class IProfile(DOMWidget):
             heading = heading.format(fun.co_name,
                                      self.cprofile_tree[fun]['callcount'],
                                      self.cprofile_tree[fun]['totaltime'])
-            self.html_value.h3(heading)
-            self.html_value.p("From: " + fun.co_filename)
+            heading = html_escape(heading)
+            self.value_cache += "<h3>" + heading + "</h3>"
+            self.value_cache += ("<p>From: " + html_escape(fun.co_filename) +
+                                 "</p>")
         except AttributeError:
-            self.html_value.h3(fun)
+            self.value_cache += "<h3>" + html_escape(fun) + "</h3>"
 
     def generate_table(self, fun):
         """
@@ -185,6 +190,7 @@ class IProfile(DOMWidget):
         else:
             calls = [function for function in self.cprofile_tree[fun]['calls']]
 
+        self.n_table_elements = len(calls)
         names = list()
         for call in calls:
             try:
@@ -194,14 +200,13 @@ class IProfile(DOMWidget):
 
         # List of tuples containing:
         # (id number, name, totaltime, inlinetime, cprofile_key)
-        calls = zip(range(len(calls)), names,
-                    (self.cprofile_tree[x]['totaltime'] for x in calls),
-                    (self.cprofile_tree[x]['inlinetime'] for x in calls),
-                    calls)
+        calls = list(zip(range(len(calls)), names,
+                         (self.cprofile_tree[x]['totaltime'] for x in calls),
+                         (self.cprofile_tree[x]['inlinetime'] for x in calls),
+                         calls))
 
         self.id_dict = {"function" + str(id): cprofile_key for
                         (id, name, time, inlinetime, cprofile_key) in calls}
-        self.n_table_elements = len(calls)
 
         # Sort by total time (descending)
         calls.sort(key=lambda x: x[2])
@@ -209,7 +214,7 @@ class IProfile(DOMWidget):
 
         # Generate bokeh table
         try:
-            ids, names, times, inlinetimes = zip(*calls)[:-1]
+            ids, names, times, inlinetimes = list(zip(*calls))[:-1]
         except ValueError:
             return
 
@@ -262,7 +267,7 @@ class IProfile(DOMWidget):
                                              height='auto',
                                              selectable=False)
 
-        self.html_value += notebook_div(bokeh_table)
+        self.value_cache += notebook_div(bokeh_table)
 
     def generate_lprofile(self, fun):
         """
@@ -300,7 +305,7 @@ class IProfile(DOMWidget):
             raw_code += ulinecache.getline(filename, lineno)
 
         formatter = LProfileFormatter(firstlineno, ltimings, noclasses=True)
-        self.html_value += highlight(raw_code, PythonLexer(), formatter)
+        self.value_cache += highlight(raw_code, PythonLexer(), formatter)
 
     def handle_on_msg(self, _, content, buffers):
         """
@@ -308,8 +313,8 @@ class IProfile(DOMWidget):
         """
         clicked_fun = self.id_dict[content]
         self.generate_content(clicked_fun)
+        self.value = self.value_cache
 
-        self.value = str(self.html_value)
 
 def add_zipped_file_to_linecache(filename):
     (zipped_filename, extension, inner) = filename.partition('.egg/')
