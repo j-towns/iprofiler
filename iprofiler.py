@@ -83,8 +83,8 @@ class IProfile(DOMWidget):
                 callcounts[call] += 1
 
         self.roots = []
-        for (i, n) in callcounts.iteritems():
-            if n == 0:
+        for i in callcounts:
+            if callcounts[i] == 0:
                 self.roots.append(i)
 
         self.delete_top_level(context)
@@ -97,12 +97,23 @@ class IProfile(DOMWidget):
         seperated by line into individual code objects...)
         """
         if context == "LINE_MAGIC":
-            junk_calls = self.roots
-            tree = self.cprofile_tree
-            junk_calls.append(tree[junk_calls[0]]['calls'].keys()[0])
-            junk_calls.append(tree[junk_calls[-1]]['calls'].keys()[0])
-            for junk_call in junk_calls:
-                del self.cprofile_tree[junk_call]
+            # Find the root nodes that we want
+            new_roots = []
+            for function in self.cprofile_tree:
+                try:
+                    if function.co_name == "<module>":
+                        new_roots += self.cprofile_tree[function]['calls']
+                except AttributeError:
+                    pass
+            # Remove function from new_roots if its child is already in
+            # new_roots
+            for i in range(len(new_roots)):
+                function = new_roots[i]
+                try:
+                    if function.co_name == "<module>":
+                        del new_roots[i]
+                except AttributeError:
+                    pass
 
         if context == "CELL_MAGIC":
             # Find the root nodes that we want
@@ -114,18 +125,18 @@ class IProfile(DOMWidget):
                 except AttributeError:
                     pass
 
-            # Populate a new tree with everything below roots in the original
-            # tree.
-            new_cprofile_tree = {}
-            def populate_new_tree(roots):
-                for root in roots:
-                    if root not in new_cprofile_tree:
-                        new_cprofile_tree[root] = self.cprofile_tree[root]
-                        populate_new_tree(self.cprofile_tree[root]['calls'])
+        # Populate a new tree with everything below roots in the original
+        # tree.
+        new_cprofile_tree = {}
+        def populate_new_tree(roots):
+            for root in roots:
+                if root not in new_cprofile_tree:
+                    new_cprofile_tree[root] = self.cprofile_tree[root]
+                    populate_new_tree(self.cprofile_tree[root]['calls'])
 
-            populate_new_tree(new_roots)
-            self.cprofile_tree = new_cprofile_tree
-            self.roots = new_roots
+        populate_new_tree(new_roots)
+        self.cprofile_tree = new_cprofile_tree
+        self.roots = new_roots
 
     _view_name = Unicode('IProfileView').tag(sync=True)
 
@@ -201,13 +212,28 @@ class IProfile(DOMWidget):
             ids, names, times, inlinetimes = zip(*calls)[:-1]
         except ValueError:
             return
+
+        time_plot_multiplier = 100 / max(times)
+        plot_inline_times = [time_plot_multiplier * time for time in
+                              inlinetimes]
+        plot_extra_times = [time_plot_multiplier * (totaltime - inlinetime)
+                            for totaltime, inlinetime in zip(times,
+                                                             inlinetimes)]
+
         table_data = dict(ids=ids, names=names, times=times,
-                          inlinetimes=inlinetimes)
+                          inlinetimes=inlinetimes,
+                          plot_inline_times=plot_inline_times,
+                          plot_extra_times=plot_extra_times)
+
         table_data = ColumnDataSource(table_data)
 
-        time_formatter = bokeh_tables.NumberFormatter(format='0,0.000')
+        time_formatter = bokeh_tables.NumberFormatter(format='0,0.00000')
         name_formatter = bokeh_tables.HTMLTemplateFormatter(
         template='<a id="function<%= ids %>"><%- names %></a>'
+        )
+        time_plot_html_template='<img src="/nbextensions/iprofiler/red.gif" height="10" width="<%= plot_inline_times %>"><img src="/nbextensions/iprofiler/pink.gif" height="10" width="<%= plot_extra_times %>">'
+        time_plot_formatter = bokeh_tables.HTMLTemplateFormatter(
+        template=time_plot_html_template
         )
 
         columns = [
@@ -221,7 +247,9 @@ class IProfile(DOMWidget):
         bokeh_tables.TableColumn(title="Inline time (s)",
                                  field="inlinetimes",
                                  formatter=time_formatter,
-                                 default_sort="descending")
+                                 default_sort="descending"),
+        bokeh_tables.TableColumn(title="Time plot",
+                                 formatter=time_plot_formatter)
         ]
 
         bokeh_table = bokeh_tables.DataTable(source=table_data,
