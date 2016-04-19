@@ -48,18 +48,28 @@ else:
 
 # ============================================================
 
+
 class IProfile(DOMWidget):
     def __init__(self, cprofile, lprofile=None, context=None, *args, **kwargs):
         self.generate_cprofile_tree(cprofile, context)
         self.lprofile = lprofile
+
+        # HTML is stored in this variable until ready to be pushed to front end
         self.value_cache = ""
+
         self.generate_content()
+
+        # Push HTML to front end
         self.value = self.value_cache
+
         self.on_msg(self.handle_on_msg)
 
         super(IProfile, self).__init__(value=self.value)
 
     def generate_cprofile_tree(self, cprofile, context=None):
+        """
+        Generate a dict based on the output of the cProfiler.
+        """
         self.cprofile_tree = {}
         for entry in cprofile:
             function = entry[0]
@@ -95,7 +105,7 @@ class IProfile(DOMWidget):
         """
         Delete the top level calls which are not part of the user's code.
 
-        If CELL_MAGIC then also merge the entries for the cell (which are
+        TODO: If CELL_MAGIC then also merge the entries for the cell (which are
         seperated by line into individual code objects...)
         """
         if context == "LINE_MAGIC":
@@ -107,8 +117,11 @@ class IProfile(DOMWidget):
                         new_roots += self.cprofile_tree[function]['calls']
                 except AttributeError:
                     pass
+
             # Remove function from new_roots if its child is already in
             # new_roots
+            new_roots = [r for r in new_roots if (type(r) == str or
+                                                  r.co_name != "<module>")]
             for i in range(len(new_roots)):
                 function = new_roots[i]
                 try:
@@ -130,6 +143,7 @@ class IProfile(DOMWidget):
         # Populate a new tree with everything below roots in the original
         # tree.
         new_cprofile_tree = {}
+
         def populate_new_tree(roots):
             for root in roots:
                 if root not in new_cprofile_tree:
@@ -142,6 +156,7 @@ class IProfile(DOMWidget):
 
     _view_name = Unicode('IProfileView').tag(sync=True)
 
+    # The following two traits are used to send data to the front end.
     # This trait is the actual html displayed in the widget
     value = Unicode().tag(sync=True)
 
@@ -154,7 +169,6 @@ class IProfile(DOMWidget):
     def generate_content(self, fun=None):
         """Generate profile page for function fun. If fun=None then generate
         a summary page."""
-        # self.html_value = html.HTML()
         self.value_cache = ""
         self.generate_heading(fun)
         self.generate_table(fun)
@@ -182,7 +196,8 @@ class IProfile(DOMWidget):
     def generate_table(self, fun):
         """
         Generate a table displaying the functions called by fun and their
-        respective running times.
+        respective running times. This is done using Bokeh's DataTable widget,
+        which is based on SlickGrid.
         """
         if fun is None:
             # Generate summary page
@@ -191,12 +206,8 @@ class IProfile(DOMWidget):
             calls = [function for function in self.cprofile_tree[fun]['calls']]
 
         self.n_table_elements = len(calls)
-        names = list()
-        for call in calls:
-            try:
-                names.append(str(call.co_name))
-            except AttributeError:
-                names.append(str(call))
+
+        names = [call if type(call) == str else call.co_name for call in calls]
 
         # List of tuples containing:
         # (id number, name, totaltime, inlinetime, cprofile_key)
@@ -220,7 +231,7 @@ class IProfile(DOMWidget):
 
         time_plot_multiplier = 100 / max(times)
         plot_inline_times = [time_plot_multiplier * time for time in
-                              inlinetimes]
+                             inlinetimes]
         plot_extra_times = [time_plot_multiplier * (totaltime - inlinetime)
                             for totaltime, inlinetime in zip(times,
                                                              inlinetimes)]
@@ -232,30 +243,33 @@ class IProfile(DOMWidget):
 
         table_data = ColumnDataSource(table_data)
 
-        time_formatter = bokeh_tables.NumberFormatter(format='0,0.00000')
-        name_formatter = bokeh_tables.HTMLTemplateFormatter(
-        template='<a id="function<%= ids %>"><%- names %></a>'
-        )
-        time_plot_html_template='<img src="/nbextensions/iprofiler/red.gif" height="10" width="<%= plot_inline_times %>"><img src="/nbextensions/iprofiler/pink.gif" height="10" width="<%= plot_extra_times %>">'
-        time_plot_formatter = bokeh_tables.HTMLTemplateFormatter(
-        template=time_plot_html_template
-        )
+        time_format = bokeh_tables.NumberFormatter(format='0,0.00000')
 
-        columns = [
-        bokeh_tables.TableColumn(title="Function",
-                                 field="names",
-                                 formatter=name_formatter),
-        bokeh_tables.TableColumn(title="Total time (s)",
-                                 field="times",
-                                 formatter=time_formatter,
-                                 default_sort="descending"),
-        bokeh_tables.TableColumn(title="Inline time (s)",
-                                 field="inlinetimes",
-                                 formatter=time_formatter,
-                                 default_sort="descending"),
-        bokeh_tables.TableColumn(title="Time plot",
-                                 formatter=time_plot_formatter)
-        ]
+        name_template = '<a id="function<%= ids %>"><%- names %></a>'
+        name_format = (bokeh_tables.
+                       HTMLTemplateFormatter(template=name_template))
+
+        time_plot_template = ('<img src="/nbextensions/iprofiler/red.gif"' +
+                              'height="10" width="<%= plot_inline_times%>">' +
+                              '<img src="/nbextensions/iprofiler/pink.gif"' +
+                              'height="10" width="<%= plot_extra_times %>">')
+        time_plot_format = (bokeh_tables.
+                            HTMLTemplateFormatter(template=time_plot_template))
+
+        columns = [bokeh_tables.TableColumn(title="Function",
+                                            field="names",
+                                            formatter=name_format),
+                   bokeh_tables.TableColumn(title="Total time (s)",
+                                            field="times",
+                                            formatter=time_format,
+                                            default_sort="descending"),
+                   bokeh_tables.TableColumn(title="Inline time (s)",
+                                            field="inlinetimes",
+                                            formatter=time_format,
+                                            default_sort="descending"),
+                   bokeh_tables.TableColumn(title="Time plot",
+                                            sortable=False,
+                                            formatter=time_plot_format)]
 
         bokeh_table = bokeh_tables.DataTable(source=table_data,
                                              columns=columns,
@@ -322,7 +336,8 @@ def add_zipped_file_to_linecache(filename):
     assert zipfile.is_zipfile(zipped_filename)
     zipped_file = zipfile.ZipFile(zipped_filename)
     ulinecache.linecache.cache[filename] = (None, None,
-                                 zipped_file.open(inner, 'r').readlines())
+                                            zipped_file.open(inner, 'r').
+                                            readlines())
     zipped_file.close()
 
 
@@ -356,6 +371,7 @@ class LProfileFormatter(HtmlFormatter):
             else:
                 yield i, no_time_template.format('', '', lineno, line)
             self.lineno += 1
+
 
 @magics_class
 class IProfilerMagics(Magics):
@@ -402,6 +418,7 @@ class IProfilerMagics(Magics):
             # Should find a better solution
             self.shell.user_ns['_IPROFILE'] = iprofile
             self.shell.run_cell('_IPROFILE')
+
 
 def load_ipython_extension(shell):
     # Initiate bokeh
