@@ -4,6 +4,7 @@ Interactive code profiling widget for IPython + Jupyter Notebook.
 Tested with Jupyter notebook server 4.1.0 and 4.2.0, Python 2.7 and 3.5, IPython 4.1.2. May be compatible with earlier/later versions.
 
 ## Dependencies
++ Cython
 + Ipython/Jupyter
 + Bokeh
 
