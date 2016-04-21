@@ -13,9 +13,17 @@ require(["nbextensions/widgets/widgets/js/widget", "nbextensions/widgets/widgets
             return function() {this.send("function" + index);};
         },
 
+        gen_nav_message(message) {
+            return function() {this.send(message);};
+        },
+
         generate_events: function(){
             // Generate click events for function table.
             var events = {};
+            events["click #iprofile_home"] = this.gen_nav_message("home");
+            events["click #iprofile_back"] = this.gen_nav_message("back");
+            events["click #iprofile_forward"] = this.gen_nav_message("forward");
+
             for (var index = 0;  index < this.model.get('n_table_elements'); index++) {
                 events["click #function" + index] = this.gen_function_message(index);
             }

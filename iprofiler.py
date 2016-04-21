@@ -54,13 +54,9 @@ class IProfile(DOMWidget):
         self.generate_cprofile_tree(cprofile, context)
         self.lprofile = lprofile
 
-        # HTML is stored in this variable until ready to be pushed to front end
-        self.value_cache = ""
+        self.backward.append(None)
 
         self.generate_content()
-
-        # Push HTML to front end
-        self.value = self.value_cache
 
         self.on_msg(self.handle_on_msg)
 
@@ -166,14 +162,36 @@ class IProfile(DOMWidget):
     # Dictionary mapping html id's to function names
     id_dict = {}
 
+    # Two lists used for the back and forward buttons. Backward includes the
+    # currently displayed function.
+    backward = []
+    forward = []
+
     def generate_content(self, fun=None):
         """Generate profile page for function fun. If fun=None then generate
         a summary page."""
         self.value_cache = ""
+        self.generate_nav(fun)
         self.generate_heading(fun)
         self.generate_table(fun)
         if self.lprofile is not None and fun is not None:
             self.generate_lprofile(fun)
+        self.value = self.value_cache
+
+    def generate_nav(self, fun=None):
+        self.value_cache += '<p>'
+        if fun is None:
+            self.value_cache += 'Home '
+        else:
+            self.value_cache += '<a id="iprofile_home">Home</a> '
+        if len(self.backward) > 1:
+            self.value_cache += '<a id="iprofile_back">Back</a> '
+        else:
+            self.value_cache += 'Back '
+        if len(self.forward) > 0:
+            self.value_cache += '<a id="iprofile_forward">Forward</a></p>'
+        else:
+            self.value_cache += 'Forward</p>'
 
     def generate_heading(self, fun):
         """Generate a heading for the top of the iprofile."""
@@ -192,6 +210,8 @@ class IProfile(DOMWidget):
                                  "</p>")
         except AttributeError:
             self.value_cache += "<h3>" + html_escape(fun) + "</h3>"
+
+        self.value_cache += '<p>'
 
     def generate_table(self, fun):
         """
@@ -325,9 +345,21 @@ class IProfile(DOMWidget):
         """
         Handler for click (and potentially other) events from the user.
         """
-        clicked_fun = self.id_dict[content]
-        self.generate_content(clicked_fun)
-        self.value = self.value_cache
+        if content == "home":
+            self.backward.append(None)
+            self.forward = []
+            self.generate_content()
+        elif content == "back":
+            self.forward.append(self.backward.pop())
+            self.generate_content(self.backward[-1])
+        elif content == "forward":
+            self.backward.append(self.forward.pop())
+            self.generate_content(self.backward[-1])
+        else:
+            clicked_fun = self.id_dict[content]
+            self.backward.append(clicked_fun)
+            self.forward = []
+            self.generate_content(clicked_fun)
 
 
 def add_zipped_file_to_linecache(filename):
