@@ -54,6 +54,14 @@ class IProfile(DOMWidget):
         self.generate_cprofile_tree(cprofile, context)
         self.lprofile = lprofile
 
+        # Two lists used for the back and forward buttons. Backward includes
+        # the currently displayed function.
+        self.backward = []
+        self.forward = []
+
+        # Dictionary mapping html id's to function names
+        self.id_dict = {}
+
         self.backward.append(None)
 
         self.generate_content()
@@ -159,14 +167,6 @@ class IProfile(DOMWidget):
     # Number of elements in table (used by front end to generate click events)
     n_table_elements = Int(0).tag(sync=True)
 
-    # Dictionary mapping html id's to function names
-    id_dict = {}
-
-    # Two lists used for the back and forward buttons. Backward includes the
-    # currently displayed function.
-    backward = []
-    forward = []
-
     def generate_content(self, fun=None):
         """Generate profile page for function fun. If fun=None then generate
         a summary page."""
@@ -181,17 +181,27 @@ class IProfile(DOMWidget):
     def generate_nav(self, fun=None):
         self.value_cache += '<p>'
         if fun is None:
-            self.value_cache += 'Home '
+            self.value_cache += '<img src="/nbextensions/iprofiler/home.png">'
         else:
-            self.value_cache += '<a id="iprofile_home">Home</a> '
+            self.value_cache += ('<a id="iprofile_home" '
+                                 'style="cursor:pointer">'
+                                 '<img src="/nbextensions/iprofiler/home.png">'
+                                 '</a>')
         if len(self.backward) > 1:
-            self.value_cache += '<a id="iprofile_back">Back</a> '
+            self.value_cache += ('<a id="iprofile_back" '
+                                 'style="cursor:pointer">'
+                                 '<img src="/nbextensions/iprofiler/back.png">'
+                                 '</a>')
         else:
-            self.value_cache += 'Back '
+            self.value_cache += ('<img src="/nbextensions/iprofiler/back_'
+                                 'grey.png">')
         if len(self.forward) > 0:
-            self.value_cache += '<a id="iprofile_forward">Forward</a></p>'
+            self.value_cache += ('<a id="iprofile_forward" '
+                                 'style="cursor:pointer"><img' 'src="/nbextensions/iprofiler/forward.png">'
+                                 '</a></p>')
         else:
-            self.value_cache += 'Forward</p>'
+            self.value_cache += ('<img src="/nbextensions/iprofiler/forward_'
+                                 'grey.png"></p>')
 
     def generate_heading(self, fun):
         """Generate a heading for the top of the iprofile."""
@@ -206,8 +216,8 @@ class IProfile(DOMWidget):
                                      self.cprofile_tree[fun]['totaltime'])
             heading = html_escape(heading)
             self.value_cache += "<h3>" + heading + "</h3>"
-            self.value_cache += ("<p>From: " + html_escape(fun.co_filename) +
-                                 "</p>")
+            self.value_cache += ("<p>From file: " +
+                                 html_escape(fun.co_filename) + "</p>")
         except AttributeError:
             self.value_cache += "<h3>" + html_escape(fun) + "</h3>"
 
