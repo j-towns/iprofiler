@@ -1,12 +1,25 @@
-require(["nbextensions/widgets/widgets/js/widget", "nbextensions/widgets/widgets/js/manager"], function(widget, manager){
+define(["nbextensions/widgets/widgets/js/widget", "nbextensions/widgets/widgets/js/manager"], function(widget, manager){
 
     var IProfileView = widget.DOMWidgetView.extend({
 
+        initialize: function(options) {
+            this.$el.append('<div id="nav"></div>');
+            this.$el.append('<div id="heading"></div>');
+            this.$el.append(this.model.get('bokeh_table_div'));
+            this.$el.append('<div id="lprofile"></div>');
+            this.model.on('change:value_nav', this.value_changed, this);
+            this.model.on('change:value_heading', this.value_changed, this);
+            this.model.on('change:value_lprofile', this.value_changed, this);
+            this.options = options || {};
+        },
+
         // Render the view.
         render: function(){
-            this.$el.html(this.model.get('value'));
-            this.model.on('change:value', this.value_changed, this);
+            this.$el.children('#nav').html(this.model.get('value_nav'));
+            this.$el.children('#heading').html(this.model.get('value_heading'));
+            this.$el.children('#lprofile').html(this.model.get('value_lprofile'));
             this.generate_events();
+            return this;
         },
 
         gen_function_message(index) {

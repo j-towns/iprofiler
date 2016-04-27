@@ -1,5 +1,6 @@
 from IPython.utils import openpy
 from IPython.utils import ulinecache
+from IPython.core import display
 from IPython.core.magic import (Magics, magics_class, line_magic,
                                 cell_magic, line_cell_magic)
 
@@ -14,13 +15,15 @@ from pygments.formatters import HtmlFormatter
 import zipfile
 import sys
 
-from bokeh.charts import Bar
 from bokeh.embed import notebook_div
 from bokeh.charts.attributes import CatAttr
 import bokeh.models.widgets.tables as bokeh_tables
 from bokeh.models import ColumnDataSource
 from bokeh.util.notebook import load_notebook
+import bokeh.io as bokeh_io
+import bokeh.util as bokeh_util
 from bokeh.io import show, vform
+from bokeh.io import push_notebook
 
 # Python 2/3 compatibility utils
 # ===========================================================
@@ -56,19 +59,24 @@ class IProfile(DOMWidget):
 
         # Two lists used for the back and forward buttons. Backward includes
         # the currently displayed function.
-        self.backward = []
+        self.backward = [None]
         self.forward = []
 
         # Dictionary mapping html id's to function names
         self.id_dict = {}
-
-        self.backward.append(None)
-
+        self.init_bokeh_table_data()
         self.generate_content()
-
         self.on_msg(self.handle_on_msg)
+        super(IProfile, self).__init__()
 
-        super(IProfile, self).__init__(value=self.value)
+    def init_bokeh_table_data(self):
+        table_data = dict(ids=[], names=[], times=[],
+                          inlinetimes=[],
+                          plot_inline_times=[],
+                          plot_extra_times=[])
+        self.table_data = ColumnDataSource(table_data)
+        self.bokeh_table_handle = None
+        self.bokeh_comms_target = None
 
     def generate_cprofile_tree(self, cprofile, context=None):
         """
@@ -160,9 +168,12 @@ class IProfile(DOMWidget):
 
     _view_name = Unicode('IProfileView').tag(sync=True)
 
-    # The following two traits are used to send data to the front end.
-    # This trait is the actual html displayed in the widget
-    value = Unicode().tag(sync=True)
+    # The following traits are used to send data to the front end.
+    # These trait is the actual html displayed in the widget
+    value_nav = Unicode().tag(sync=True)
+    value_heading = Unicode().tag(sync=True)
+    bokeh_table_div = Unicode().tag(sync=True)
+    value_lprofile = Unicode().tag(sync=True)
 
     # Number of elements in table (used by front end to generate click events)
     n_table_elements = Int(0).tag(sync=True)
@@ -174,54 +185,53 @@ class IProfile(DOMWidget):
         self.generate_nav(fun)
         self.generate_heading(fun)
         self.generate_table(fun)
-        if self.lprofile is not None and fun is not None:
-            self.generate_lprofile(fun)
-        self.value = self.value_cache
+        self.generate_lprofile(fun)
 
     def generate_nav(self, fun=None):
-        self.value_cache += '<p>'
+        value_nav_cache = '<p>'
         if fun is None:
-            self.value_cache += '<img src="/nbextensions/iprofiler/home.png">'
+            value_nav_cache += '<img src="/nbextensions/iprofiler/home.png">'
         else:
-            self.value_cache += ('<a id="iprofile_home" '
+            value_nav_cache += ('<a id="iprofile_home" '
                                  'style="cursor:pointer">'
                                  '<img src="/nbextensions/iprofiler/home.png">'
                                  '</a>')
         if len(self.backward) > 1:
-            self.value_cache += ('<a id="iprofile_back" '
+            value_nav_cache += ('<a id="iprofile_back" '
                                  'style="cursor:pointer">'
                                  '<img src="/nbextensions/iprofiler/back.png">'
                                  '</a>')
         else:
-            self.value_cache += ('<img src="/nbextensions/iprofiler/back_'
+            value_nav_cache += ('<img src="/nbextensions/iprofiler/back_'
                                  'grey.png">')
         if len(self.forward) > 0:
-            self.value_cache += ('<a id="iprofile_forward" '
+            value_nav_cache += ('<a id="iprofile_forward" '
                                  'style="cursor:pointer"><img' 'src="/nbextensions/iprofiler/forward.png">'
                                  '</a></p>')
         else:
-            self.value_cache += ('<img src="/nbextensions/iprofiler/forward_'
+            value_nav_cache += ('<img src="/nbextensions/iprofiler/forward_'
                                  'grey.png"></p>')
+        self.value_nav = value_nav_cache
 
     def generate_heading(self, fun):
         """Generate a heading for the top of the iprofile."""
+        value_heading_cache = ""
         if fun is None:
-            self.value_cache += "<h3>Summary</h3>"
-            return
+            value_heading_cache += "<h3>Summary</h3>"
+        else:
+            try:
+                heading = "{} (Calls: {}, Time: {})"
+                heading = heading.format(fun.co_name,
+                                         self.cprofile_tree[fun]['callcount'],
+                                         self.cprofile_tree[fun]['totaltime'])
+                heading = html_escape(heading)
+                value_heading_cache += "<h3>" + heading + "</h3>"
+                value_heading_cache += ("<p>From file: " +
+                                     html_escape(fun.co_filename) + "</p>")
+            except AttributeError:
+                value_heading_cache += "<h3>" + html_escape(fun) + "</h3>"
 
-        try:
-            heading = "{} (Calls: {}, Time: {})"
-            heading = heading.format(fun.co_name,
-                                     self.cprofile_tree[fun]['callcount'],
-                                     self.cprofile_tree[fun]['totaltime'])
-            heading = html_escape(heading)
-            self.value_cache += "<h3>" + heading + "</h3>"
-            self.value_cache += ("<p>From file: " +
-                                 html_escape(fun.co_filename) + "</p>")
-        except AttributeError:
-            self.value_cache += "<h3>" + html_escape(fun) + "</h3>"
-
-        self.value_cache += '<p>'
+        self.value_heading = value_heading_cache
 
     def generate_table(self, fun):
         """
@@ -266,13 +276,29 @@ class IProfile(DOMWidget):
                             for totaltime, inlinetime in zip(times,
                                                              inlinetimes)]
 
-        table_data = dict(ids=ids, names=names, times=times,
-                          inlinetimes=inlinetimes,
-                          plot_inline_times=plot_inline_times,
-                          plot_extra_times=plot_extra_times)
+        self.table_data.data = dict(ids=ids, names=names, times=times,
+                                    inlinetimes=inlinetimes,
+                                    plot_inline_times=plot_inline_times,
+                                    plot_extra_times=plot_extra_times)
 
-        table_data = ColumnDataSource(table_data)
+        if self.bokeh_table_div == "":
+            # First run
+            self.init_bokeh_table()
+        elif self.bokeh_table_handle is None:
+            # Second run
+            comms_target = self.bokeh_comms_target
+            self.bokeh_table_handle = (bokeh_io.
+                                       _CommsHandle(bokeh_util.notebook.
+                                                    get_comms(comms_target),
+                                       bokeh_io.curstate().document,
+                                       bokeh_io.curstate().document.to_json()))
+            bokeh_io._state.last_comms_handle = self.bokeh_table_handle
+            push_notebook()
+        else:
+            # Third run onwards
+            push_notebook()
 
+    def init_bokeh_table(self):
         time_format = bokeh_tables.NumberFormatter(format='0,0.00000')
 
         name_template = '<a id="function<%= ids %>"><%- names %></a>'
@@ -301,7 +327,7 @@ class IProfile(DOMWidget):
                                             sortable=False,
                                             formatter=time_plot_format)]
 
-        bokeh_table = bokeh_tables.DataTable(source=table_data,
+        bokeh_table = bokeh_tables.DataTable(source=self.table_data,
                                              columns=columns,
                                              # Would be nice if width could
                                              # be automatic but this appears
@@ -311,7 +337,11 @@ class IProfile(DOMWidget):
                                              height='auto',
                                              selectable=False)
 
-        self.value_cache += notebook_div(bokeh_table)
+        self.bokeh_table = bokeh_table
+
+        comms_target = bokeh_util.serialization.make_id()
+        self.bokeh_comms_target = comms_target
+        self.bokeh_table_div = notebook_div(bokeh_table, comms_target)
 
     def generate_lprofile(self, fun):
         """
@@ -349,7 +379,7 @@ class IProfile(DOMWidget):
             raw_code += ulinecache.getline(filename, lineno)
 
         formatter = LProfileFormatter(firstlineno, ltimings, noclasses=True)
-        self.value_cache += highlight(raw_code, PythonLexer(), formatter)
+        self.value_lprofile = highlight(raw_code, PythonLexer(), formatter)
 
     def handle_on_msg(self, _, content, buffers):
         """
@@ -466,8 +496,5 @@ def load_ipython_extension(shell):
     # Initiate bokeh
     load_notebook(hide_banner=True)
     shell.register_magics(IProfilerMagics)
-    cell = """%%javascript
-require(["base/js/utils"], function(utils){
-    utils.load_extensions('iprofiler/iprofiler');
-});"""
-    shell.run_cell(cell)
+    script = 'require(["nbextensions/iprofiler/iprofiler"])'
+    display.display_javascript(script, raw=True)
