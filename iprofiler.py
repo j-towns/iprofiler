@@ -206,7 +206,7 @@ class IProfile(DOMWidget):
                                  'grey.png">')
         if len(self.forward) > 0:
             value_nav_cache += ('<a id="iprofile_forward" '
-                                 'style="cursor:pointer"><img' 'src="/nbextensions/iprofiler/forward.png">'
+                                 'style="cursor:pointer"><img ' 'src="/nbextensions/iprofiler/forward.png">'
                                  '</a>')
         else:
             value_nav_cache += ('<img src="/nbextensions/iprofiler/forward_'
