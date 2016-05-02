@@ -11,6 +11,7 @@ define(["nbextensions/widgets/widgets/js/widget", "nbextensions/widgets/widgets/
             this.model.on('change:value_heading', this.value_changed, this);
             this.model.on('change:value_lprofile', this.value_changed, this);
             this.options = options || {};
+            this.send("init_complete");
         },
 
         // Render the view.

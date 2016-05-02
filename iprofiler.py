@@ -22,7 +22,7 @@ from bokeh.models import ColumnDataSource
 from bokeh.util.notebook import load_notebook
 import bokeh.io as bokeh_io
 import bokeh.util as bokeh_util
-from bokeh.io import show, vform
+from bokeh.io import show, hplot, output_notebook
 from bokeh.io import push_notebook
 
 # Python 2/3 compatibility utils
@@ -169,7 +169,7 @@ class IProfile(DOMWidget):
     _view_name = Unicode('IProfileView').tag(sync=True)
 
     # The following traits are used to send data to the front end.
-    # These trait is the actual html displayed in the widget
+    # These traits contain the actual html displayed in the widget
     value_nav = Unicode().tag(sync=True)
     value_heading = Unicode().tag(sync=True)
     bokeh_table_div = Unicode().tag(sync=True)
@@ -187,8 +187,8 @@ class IProfile(DOMWidget):
         self.generate_table(fun)
         self.generate_lprofile(fun)
 
-    def generate_nav(self, fun=None):
-        value_nav_cache = '<p>'
+    def generate_nav(self, fun):
+        value_nav_cache = ''
         if fun is None:
             value_nav_cache += '<img src="/nbextensions/iprofiler/home.png">'
         else:
@@ -207,10 +207,10 @@ class IProfile(DOMWidget):
         if len(self.forward) > 0:
             value_nav_cache += ('<a id="iprofile_forward" '
                                  'style="cursor:pointer"><img' 'src="/nbextensions/iprofiler/forward.png">'
-                                 '</a></p>')
+                                 '</a>')
         else:
             value_nav_cache += ('<img src="/nbextensions/iprofiler/forward_'
-                                 'grey.png"></p>')
+                                 'grey.png">')
         self.value_nav = value_nav_cache
 
     def generate_heading(self, fun):
@@ -284,18 +284,7 @@ class IProfile(DOMWidget):
         if self.bokeh_table_div == "":
             # First run
             self.init_bokeh_table()
-        elif self.bokeh_table_handle is None:
-            # Second run
-            comms_target = self.bokeh_comms_target
-            self.bokeh_table_handle = (bokeh_io.
-                                       _CommsHandle(bokeh_util.notebook.
-                                                    get_comms(comms_target),
-                                       bokeh_io.curstate().document,
-                                       bokeh_io.curstate().document.to_json()))
-            bokeh_io._state.last_comms_handle = self.bokeh_table_handle
-            push_notebook()
         else:
-            # Third run onwards
             push_notebook()
 
     def init_bokeh_table(self):
@@ -341,13 +330,15 @@ class IProfile(DOMWidget):
 
         comms_target = bokeh_util.serialization.make_id()
         self.bokeh_comms_target = comms_target
-        self.bokeh_table_div = notebook_div(bokeh_table, comms_target)
+        self.bokeh_table_div = notebook_div(hplot(bokeh_table), comms_target)
+        #show(vform(self.bokeh_table))
 
     def generate_lprofile(self, fun):
         """
         Generate div containing profiled source code with timings of each line,
         taken from iline_profiler.
         """
+        self.value_lprofile = ""
         try:
             filename = fun.co_filename
             firstlineno = fun.co_firstlineno
@@ -395,6 +386,14 @@ class IProfile(DOMWidget):
         elif content == "forward":
             self.backward.append(self.forward.pop())
             self.generate_content(self.backward[-1])
+        elif content == "init_complete":
+            comms_target = self.bokeh_comms_target
+            self.bokeh_table_handle = (bokeh_io.
+                                   _CommsHandle(bokeh_util.notebook.
+                                                get_comms(comms_target),
+                                   bokeh_io.curstate().document,
+                                   bokeh_io.curstate().document.to_json()))
+            bokeh_io._state.last_comms_handle = self.bokeh_table_handle
         else:
             clicked_fun = self.id_dict[content]
             self.backward.append(clicked_fun)
@@ -494,7 +493,7 @@ class IProfilerMagics(Magics):
 
 def load_ipython_extension(shell):
     # Initiate bokeh
-    load_notebook(hide_banner=True)
+    output_notebook(hide_banner=True)
     shell.register_magics(IProfilerMagics)
     script = 'require(["nbextensions/iprofiler/iprofiler"])'
     display.display_javascript(script, raw=True)
