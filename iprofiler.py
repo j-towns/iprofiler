@@ -323,7 +323,7 @@ class IProfile(DOMWidget):
                                              # to be broken in firefox and
                                              # chrome.
                                              width=620,
-                                             height='auto',
+                                             height=200,
                                              selectable=False)
 
         self.bokeh_table = bokeh_table
