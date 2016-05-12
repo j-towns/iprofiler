@@ -1,4 +1,6 @@
-define(["nbextensions/widgets/widgets/js/widget", "nbextensions/widgets/widgets/js/manager"], function(widget, manager){
+//require.undef('IProfileModule');
+
+define(["jupyter-js-widgets"], function(widget){
 
     var IProfileView = widget.DOMWidgetView.extend({
 
@@ -52,5 +54,7 @@ define(["nbextensions/widgets/widgets/js/widget", "nbextensions/widgets/widgets/
         },
     });
 
-    manager.WidgetManager.register_widget_view('IProfileView', IProfileView);
+    return {
+        IProfileView: IProfileView
+    };
 });

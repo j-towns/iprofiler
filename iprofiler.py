@@ -167,6 +167,7 @@ class IProfile(DOMWidget):
         self.roots = new_roots
 
     _view_name = Unicode('IProfileView').tag(sync=True)
+    _view_module = Unicode('nbextensions/iprofiler/iprofiler').tag(sync=True)
 
     # The following traits are used to send data to the front end.
     # These traits contain the actual html displayed in the widget
@@ -290,7 +291,7 @@ class IProfile(DOMWidget):
     def init_bokeh_table(self):
         time_format = bokeh_tables.NumberFormatter(format='0,0.00000')
 
-        name_template = '<a id="function<%= ids %>"><%- names %></a>'
+        name_template = '<a id="function<%= ids %>", style="cursor:pointer"><%- names %></a>'
         name_format = (bokeh_tables.
                        HTMLTemplateFormatter(template=name_template))
 

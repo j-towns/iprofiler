@@ -51,7 +51,7 @@ setup(name='IProfiler',
       author='James Townsend',
       author_email='jamiehntownsend@gmail.com',
       url='https://github.com/j-towns/iprofiler',
-      install_requires=['cython', 'bokeh'],
+      install_requires=['cython', 'bokeh', 'ipywidgets >= 5'],
       ext_modules=[
           Extension('_iline_profiler',
                     sources=[line_profiler_source, 'line_profiler/timers.c', 'line_profiler/unset_trace.c'],
