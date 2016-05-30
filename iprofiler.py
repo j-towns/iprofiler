@@ -6,7 +6,7 @@ from IPython.core.magic import (Magics, magics_class, line_magic,
 
 from ipywidgets import DOMWidget
 from traitlets import Unicode, Int
-from ipywidgets.widgets.widget import CallbackDispatcher, register
+from ipywidgets.widgets.widget import register
 
 from pygments import highlight
 from pygments.lexers import PythonLexer
@@ -16,7 +16,6 @@ import zipfile
 import sys
 
 from bokeh.embed import notebook_div
-from bokeh.charts.attributes import CatAttr
 import bokeh.models.widgets.tables as bokeh_tables
 from bokeh.models import ColumnDataSource
 from bokeh.util.notebook import load_notebook
@@ -75,8 +74,6 @@ class IProfile(DOMWidget):
                           plot_inline_times=[],
                           plot_extra_times=[])
         self.table_data = ColumnDataSource(table_data)
-        self.bokeh_table_handle = None
-        self.bokeh_comms_target = None
 
     def generate_cprofile_tree(self, cprofile, context=None):
         """
@@ -207,7 +204,8 @@ class IProfile(DOMWidget):
                                  'grey.png">')
         if len(self.forward) > 0:
             value_nav_cache += ('<a id="iprofile_forward" '
-                                 'style="cursor:pointer"><img ' 'src="/nbextensions/iprofiler/forward.png">'
+                                 'style="cursor:pointer"><img '
+                                 'src="/nbextensions/iprofiler/forward.png">'
                                  '</a>')
         else:
             value_nav_cache += ('<img src="/nbextensions/iprofiler/forward_'
@@ -496,5 +494,3 @@ def load_ipython_extension(shell):
     # Initiate bokeh
     output_notebook(hide_banner=True)
     shell.register_magics(IProfilerMagics)
-    script = 'require(["nbextensions/iprofiler/iprofiler"])'
-    display.display_javascript(script, raw=True)
