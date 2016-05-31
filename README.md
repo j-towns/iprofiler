@@ -11,7 +11,7 @@ Tested with Jupyter notebook server 4.1.0 and 4.2.0, Python 2.7 and 3.5, IPython
 + Bokeh
 
 ## Installation
-`pip install --user git+https://github.com/j-towns/iprofiler`
+Clone this repo then run `python setup.py install`.
 
 ## Usage
 Once installed using the above command, use
