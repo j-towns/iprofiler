@@ -1,0 +1,29 @@
+{
+  "name": "iprofiler",
+  "version": "0.0.1",
+  "description": "Interactive code profiling widget for IPython + Jupyter Notebook",
+  "author": "Jamie Townsend",
+  "main": "src/index.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/j-towns/iprofiler.git"
+  },
+  "keywords": [
+    "jupyter",
+    "widgets",
+    "ipython",
+    "ipywidgets"
+  ],
+  "scripts": {
+    "prepublish": "webpack",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "devDependencies": {
+    "json-loader": "^0.5.4",
+    "webpack": "^1.12.14"
+  },
+  "dependencies": {
+    "jupyter-js-widgets": "^1.1.1",
+    "underscore": "^1.8.3"
+  }
+}
