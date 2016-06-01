@@ -6,7 +6,6 @@ from IPython.core.magic import (Magics, magics_class, line_magic,
 
 from ipywidgets import DOMWidget
 from traitlets import Unicode, Int
-from ipywidgets.widgets.widget import register
 
 from pygments import highlight
 from pygments.lexers import PythonLexer
@@ -164,7 +163,7 @@ class IProfile(DOMWidget):
         self.roots = new_roots
 
     _view_name = Unicode('IProfileView').tag(sync=True)
-    _view_module = Unicode('nbextensions/iprofiler/iprofiler').tag(sync=True)
+    _view_module = Unicode('iprofiler').tag(sync=True)
 
     # The following traits are used to send data to the front end.
     # These traits contain the actual html displayed in the widget
@@ -188,28 +187,28 @@ class IProfile(DOMWidget):
     def generate_nav(self, fun):
         value_nav_cache = ''
         if fun is None:
-            value_nav_cache += '<img src="/nbextensions/iprofiler/home.png">'
+            value_nav_cache += '<img src="/nbextensions/iprofiler/home.svg">'
         else:
             value_nav_cache += ('<a id="iprofile_home" '
-                                 'style="cursor:pointer">'
-                                 '<img src="/nbextensions/iprofiler/home.png">'
-                                 '</a>')
+                                'style="cursor:pointer">'
+                                '<img src="/nbextensions/iprofiler/home.svg">'
+                                '</a>')
         if len(self.backward) > 1:
             value_nav_cache += ('<a id="iprofile_back" '
-                                 'style="cursor:pointer">'
-                                 '<img src="/nbextensions/iprofiler/back.png">'
-                                 '</a>')
+                                'style="cursor:pointer">'
+                                '<img src="/nbextensions/iprofiler/back.svg">'
+                                '</a>')
         else:
             value_nav_cache += ('<img src="/nbextensions/iprofiler/back_'
-                                 'grey.png">')
+                                'grey.svg">')
         if len(self.forward) > 0:
             value_nav_cache += ('<a id="iprofile_forward" '
-                                 'style="cursor:pointer"><img '
-                                 'src="/nbextensions/iprofiler/forward.png">'
-                                 '</a>')
+                                'style="cursor:pointer"><img '
+                                'src="/nbextensions/iprofiler/forward.svg">'
+                                '</a>')
         else:
             value_nav_cache += ('<img src="/nbextensions/iprofiler/forward_'
-                                 'grey.png">')
+                                'grey.svg">')
         self.value_nav = value_nav_cache
 
     def generate_heading(self, fun):
