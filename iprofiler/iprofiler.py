@@ -446,7 +446,7 @@ class LProfileFormatter(HtmlFormatter):
 class IProfilerMagics(Magics):
     @line_cell_magic
     def iprofile(self, line, cell=None):
-        import iprofiler.iline_profiler._iline_profiler as _iline_profiler
+        import _iline_profiler
         import cProfile
         cprofiler = cProfile.Profile()
         lprofiler = _iline_profiler.LineProfiler()
