@@ -132,13 +132,13 @@ setup_args = {
         'ipywidgets>=5.1.3',
         'bokeh'
     ],
-    'ext_modules'=[
+    'ext_modules': [
         Extension('_iline_profiler',
                   sources=['line_profiler/_iline_profiler.pyx',
                            'line_profiler/timers.c',
                            'line_profiler/unset_trace.c'],
                   depends=['python25.pxd'],
-        ),
+                 )],
     'packages': find_packages(),
     'zip_safe': False,
     'cmdclass': {
