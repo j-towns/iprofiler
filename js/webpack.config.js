@@ -4,6 +4,7 @@ var version = require('./package.json').version;
 // stored in a separate local variable.
 var loaders = [
     { test: /\.json$/, loader: 'json-loader' },
+    { test: /\.svg$/, loader: 'url-loader?limit=8192' }
 ];
 
 

@@ -5,7 +5,7 @@ from IPython.core.magic import (Magics, magics_class, line_magic,
                                 cell_magic, line_cell_magic)
 
 from ipywidgets import DOMWidget
-from traitlets import Unicode, Int
+from traitlets import Unicode, Int, Bool
 
 from pygments import highlight
 from pygments.lexers import PythonLexer
@@ -23,34 +23,21 @@ import bokeh.util as bokeh_util
 from bokeh.io import show, hplot, output_notebook
 from bokeh.io import push_notebook
 
-# Python 2/3 compatibility utils
-# ===========================================================
-PY3 = sys.version_info[0] == 3
-
-# exec (from https://bitbucket.org/gutworth/six/):
-if PY3:
-    import builtins
-    exec_ = getattr(builtins, "exec")
-    del builtins
-    from html import escape as html_escape
-else:
-    def exec_(_code_, _globs_=None, _locs_=None):
-        """Execute code in a namespace."""
-        if _globs_ is None:
-            frame = sys._getframe(1)
-            _globs_ = frame.f_globals
-            if _locs_ is None:
-                _locs_ = frame.f_locals
-            del frame
-        elif _locs_ is None:
-            _locs_ = _globs_
-        exec("""exec _code_ in _globs_, _locs_""")
-    from cgi import escape as html_escape
-
-# ============================================================
-
 
 class IProfile(DOMWidget):
+    # TRAITS - Data which is synchronised with the front-end
+    #
+    #  Ipywidgets
+    _view_name = Unicode('IProfileView').tag(sync=True)
+    _view_module = Unicode('iprofiler').tag(sync=True)
+    #  Navigation
+    #    These traits set whether the home, back and forward buttons are
+    #    active.
+    nav_home_active = Bool(False).tag(sync=True)
+    nav_back_active = Bool(False).tag(sync=True)
+    nav_forward_active = Bool(False).tag(sync=True)
+
+
     def __init__(self, cprofile, lprofile=None, context=None, *args, **kwargs):
         self.generate_cprofile_tree(cprofile, context)
         self.lprofile = lprofile
@@ -162,9 +149,6 @@ class IProfile(DOMWidget):
         self.cprofile_tree = new_cprofile_tree
         self.roots = new_roots
 
-    _view_name = Unicode('IProfileView').tag(sync=True)
-    _view_module = Unicode('iprofiler').tag(sync=True)
-
     # The following traits are used to send data to the front end.
     # These traits contain the actual html displayed in the widget
     value_nav = Unicode().tag(sync=True)
@@ -185,31 +169,9 @@ class IProfile(DOMWidget):
         self.generate_lprofile(fun)
 
     def generate_nav(self, fun):
-        value_nav_cache = ''
-        if fun is None:
-            value_nav_cache += '<img src="/nbextensions/iprofiler/home.svg">'
-        else:
-            value_nav_cache += ('<a id="iprofile_home" '
-                                'style="cursor:pointer">'
-                                '<img src="/nbextensions/iprofiler/home.svg">'
-                                '</a>')
-        if len(self.backward) > 1:
-            value_nav_cache += ('<a id="iprofile_back" '
-                                'style="cursor:pointer">'
-                                '<img src="/nbextensions/iprofiler/back.svg">'
-                                '</a>')
-        else:
-            value_nav_cache += ('<img src="/nbextensions/iprofiler/back_'
-                                'grey.svg">')
-        if len(self.forward) > 0:
-            value_nav_cache += ('<a id="iprofile_forward" '
-                                'style="cursor:pointer"><img '
-                                'src="/nbextensions/iprofiler/forward.svg">'
-                                '</a>')
-        else:
-            value_nav_cache += ('<img src="/nbextensions/iprofiler/forward_'
-                                'grey.svg">')
-        self.value_nav = value_nav_cache
+        self.nav_home_active = (fun is not None)
+        self.nav_back_active = (len(self.backward) > 1)
+        self.nav_forward_active = (len(self.forward) > 0)
 
     def generate_heading(self, fun):
         """Generate a heading for the top of the iprofile."""
@@ -292,10 +254,13 @@ class IProfile(DOMWidget):
         name_format = (bokeh_tables.
                        HTMLTemplateFormatter(template=name_template))
 
-        time_plot_template = ('<img src="/nbextensions/iprofiler/red.gif"' +
-                              'height="10" width="<%= plot_inline_times%>">' +
-                              '<img src="/nbextensions/iprofiler/pink.gif"' +
-                              'height="10" width="<%= plot_extra_times %>">')
+        time_plot_template = ('<svg width="100" height="10">'
+                              '<rect width="<%= plot_inline_times%>"'
+                              'height="10" style="fill:rgb(255, 0, 0);"/>'
+                              '<rect x="<%= plot_inline_times%>"'
+                              'width="<%= plot_extra_times %>"'
+                              'height="10" style="fill:rgb(255, 160, 160);"/>'
+                              '</svg>')
         time_plot_format = (bokeh_tables.
                             HTMLTemplateFormatter(template=time_plot_template))
 
@@ -441,6 +406,31 @@ class LProfileFormatter(HtmlFormatter):
                 yield i, no_time_template.format('', '', lineno, line)
             self.lineno += 1
 
+# Python 2/3 compatibility utils
+# ===========================================================
+PY3 = sys.version_info[0] == 3
+
+# exec (from https://bitbucket.org/gutworth/six/):
+if PY3:
+    import builtins
+    exec_ = getattr(builtins, "exec")
+    del builtins
+    from html import escape as html_escape
+else:
+    def exec_(_code_, _globs_=None, _locs_=None):
+        """Execute code in a namespace."""
+        if _globs_ is None:
+            frame = sys._getframe(1)
+            _globs_ = frame.f_globals
+            if _locs_ is None:
+                _locs_ = frame.f_locals
+            del frame
+        elif _locs_ is None:
+            _locs_ = _globs_
+        exec("""exec _code_ in _globs_, _locs_""")
+    from cgi import escape as html_escape
+
+# ============================================================
 
 @magics_class
 class IProfilerMagics(Magics):
