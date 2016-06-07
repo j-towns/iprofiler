@@ -36,7 +36,12 @@ class IProfile(DOMWidget):
     nav_home_active = Bool(False).tag(sync=True)
     nav_back_active = Bool(False).tag(sync=True)
     nav_forward_active = Bool(False).tag(sync=True)
-
+    # Raw HTML for the heading, Bokeh table and line-by-line profile
+    value_heading = Unicode().tag(sync=True)
+    bokeh_table_div = Unicode().tag(sync=True)
+    value_lprofile = Unicode().tag(sync=True)
+    # Number of elements in table (used by front end to generate click events)
+    n_table_elements = Int(0).tag(sync=True)
 
     def __init__(self, cprofile, lprofile=None, context=None, *args, **kwargs):
         self.generate_cprofile_tree(cprofile, context)
@@ -149,16 +154,6 @@ class IProfile(DOMWidget):
         self.cprofile_tree = new_cprofile_tree
         self.roots = new_roots
 
-    # The following traits are used to send data to the front end.
-    # These traits contain the actual html displayed in the widget
-    value_nav = Unicode().tag(sync=True)
-    value_heading = Unicode().tag(sync=True)
-    bokeh_table_div = Unicode().tag(sync=True)
-    value_lprofile = Unicode().tag(sync=True)
-
-    # Number of elements in table (used by front end to generate click events)
-    n_table_elements = Int(0).tag(sync=True)
-
     def generate_content(self, fun=None):
         """Generate profile page for function fun. If fun=None then generate
         a summary page."""
@@ -187,7 +182,7 @@ class IProfile(DOMWidget):
                 heading = html_escape(heading)
                 value_heading_cache += "<h3>" + heading + "</h3>"
                 value_heading_cache += ("<p>From file: " +
-                                     html_escape(fun.co_filename) + "</p>")
+                                        html_escape(fun.co_filename) + "</p>")
             except AttributeError:
                 value_heading_cache += "<h3>" + html_escape(fun) + "</h3>"
 
@@ -250,7 +245,8 @@ class IProfile(DOMWidget):
     def init_bokeh_table(self):
         time_format = bokeh_tables.NumberFormatter(format='0,0.00000')
 
-        name_template = '<a id="function<%= ids %>", style="cursor:pointer"><%- names %></a>'
+        name_template = ('<a id="function<%= ids %>", style="cursor:pointer">'
+                         '<%- names %></a>')
         name_format = (bokeh_tables.
                        HTMLTemplateFormatter(template=name_template))
 
@@ -294,7 +290,6 @@ class IProfile(DOMWidget):
         comms_target = bokeh_util.serialization.make_id()
         self.bokeh_comms_target = comms_target
         self.bokeh_table_div = notebook_div(hplot(bokeh_table), comms_target)
-        #show(vform(self.bokeh_table))
 
     def generate_lprofile(self, fun):
         """
@@ -351,11 +346,14 @@ class IProfile(DOMWidget):
             self.generate_content(self.backward[-1])
         elif content == "init_complete":
             comms_target = self.bokeh_comms_target
+            # TODO: Simplify this:
             self.bokeh_table_handle = (bokeh_io.
-                                   _CommsHandle(bokeh_util.notebook.
-                                                get_comms(comms_target),
-                                   bokeh_io.curstate().document,
-                                   bokeh_io.curstate().document.to_json()))
+                                       _CommsHandle(bokeh_util.notebook.
+                                                    get_comms(comms_target),
+                                                    bokeh_io.curstate().
+                                                    document,
+                                                    bokeh_io.curstate().
+                                                    document.to_json()))
             bokeh_io._state.last_comms_handle = self.bokeh_table_handle
         else:
             clicked_fun = self.id_dict[content]
@@ -431,6 +429,7 @@ else:
     from cgi import escape as html_escape
 
 # ============================================================
+
 
 @magics_class
 class IProfilerMagics(Magics):
