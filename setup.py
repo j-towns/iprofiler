@@ -133,10 +133,10 @@ setup_args = {
         'bokeh'
     ],
     'ext_modules': [
-        Extension('_iline_profiler',
-                  sources=['line_profiler/_iline_profiler.pyx',
-                           'line_profiler/timers.c',
-                           'line_profiler/unset_trace.c'],
+        Extension('iprofiler._line_profiler',
+                  sources=['iprofiler/line_profiler/_line_profiler.pyx',
+                           'iprofiler/line_profiler/timers.c',
+                           'iprofiler/line_profiler/unset_trace.c'],
                   depends=['python25.pxd'],
                  )],
     'packages': find_packages(),
