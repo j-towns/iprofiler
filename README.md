@@ -21,7 +21,11 @@ For a development installation (requires npm),
 
 ## Usage
 Use
-`%load_ext iprofiler`
+```
+%load_ext iprofiler
+```
 to import the iprofiler to your Jupyter notebook, then use the iprofile line magic
-`%iprofile [statement]`
+```
+%iprofile [statement]
+```
 to profile a statement, or the cell magic `%%iprofile` to profile a cell.
