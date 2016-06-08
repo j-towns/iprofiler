@@ -11,11 +11,21 @@ Tested with Jupyter notebook server 4.1.0 and 4.2.0, Python 2.7 and 3.5, IPython
 + Bokeh
 
 ## Installation
-Clone this repo then run `python setup.py install`.
+For a development installation (requires npm),
+
+    $ git clone https://github.com/j-towns/iprofiler.git
+    $ cd iprofiler
+    $ pip install -e .
+    $ jupyter nbextension install --py --symlink --user iprofiler
+    $ jupyter nbextension enable --py --user iprofiler
 
 ## Usage
-Once installed using the above command, use
-`%load_ext iprofiler`
-to import the iprofiler to your notebook, then use the iprofile line magic
-`%iprofile [statement]`
+Use
+```
+%load_ext iprofiler
+```
+to import the iprofiler to your Jupyter notebook, then use the iprofile line magic
+```
+%iprofile [statement]
+```
 to profile a statement, or the cell magic `%%iprofile` to profile a cell.
