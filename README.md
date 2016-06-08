@@ -20,8 +20,8 @@ For a development installation (requires npm),
     $ jupyter nbextension enable --py --user iprofiler
 
 ## Usage
-Once installed using the above command, use
+Use
 `%load_ext iprofiler`
-to import the iprofiler to your notebook, then use the iprofile line magic
+to import the iprofiler to your Jupyter notebook, then use the iprofile line magic
 `%iprofile [statement]`
 to profile a statement, or the cell magic `%%iprofile` to profile a cell.
