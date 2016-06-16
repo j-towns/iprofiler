@@ -1,8 +1,6 @@
 from IPython.utils import openpy
 from IPython.utils import ulinecache
-from IPython.core import display
-from IPython.core.magic import (Magics, magics_class, line_magic,
-                                cell_magic, line_cell_magic)
+from IPython.core.magic import (Magics, magics_class, line_cell_magic)
 
 from ipywidgets import DOMWidget
 from traitlets import Unicode, Int, Bool
@@ -17,10 +15,9 @@ import sys
 from bokeh.embed import notebook_div
 import bokeh.models.widgets.tables as bokeh_tables
 from bokeh.models import ColumnDataSource
-from bokeh.util.notebook import load_notebook
 import bokeh.io as bokeh_io
 import bokeh.util as bokeh_util
-from bokeh.io import show, hplot, output_notebook
+from bokeh.io import hplot, output_notebook
 from bokeh.io import push_notebook
 
 
@@ -68,36 +65,20 @@ class IProfile(DOMWidget):
 
     def generate_cprofile_tree(self, cprofile, context=None):
         """
-        Generate a dict based on the output of the cProfiler.
+        Generate an easy to use dict, based on the output of cProfiler.
         """
-        self.cprofile_tree = {}
-        for entry in cprofile:
-            function = entry[0]
-            calls_raw = entry[5]
-            calls = {}
-            if calls_raw is not None:
-                for call in calls_raw:
-                    calls[call[0]] = {'callcount': call[1],
-                                      'reccallcount': call[2],
-                                      'totaltime': call[3],
-                                      'inlinetime': call[4]}
-
-            self.cprofile_tree[function] = {'callcount': entry[1],
-                                            'reccallcount': entry[2],
-                                            'totaltime': entry[3],
-                                            'inlinetime': entry[4],
-                                            'calls': calls}
-
-        # Find root nodes
-        callcounts = dict([(function, 0) for function in self.cprofile_tree])
-        for function in self.cprofile_tree:
-            for call in self.cprofile_tree[function]['calls']:
-                callcounts[call] += 1
-
-        self.roots = []
-        for i in callcounts:
-            if callcounts[i] == 0:
-                self.roots.append(i)
+        self.cprofile_tree = {
+            item[0]: {'callcount': item[1],
+                      'reccallcount': item[2],
+                      'totaltime': item[3],
+                      'inlinetime': item[4],
+                      'calls': ({} if item[5] is None else
+                                {call[0]: {'callcount': call[1],
+                                           'reccallcount': call[2],
+                                           'totaltime': call[3],
+                                           'inlinetime': call[4]}
+                                 for call in item[5]})
+                      } for item in cprofile}
 
         self.delete_top_level(context)
 
@@ -152,7 +133,6 @@ class IProfile(DOMWidget):
 
         populate_new_tree(new_roots)
         self.cprofile_tree = new_cprofile_tree
-        self.roots = new_roots
 
     def generate_content(self, fun=None):
         """Generate profile page for function fun. If fun=None then generate
@@ -170,9 +150,8 @@ class IProfile(DOMWidget):
 
     def generate_heading(self, fun):
         """Generate a heading for the top of the iprofile."""
-        value_heading_cache = ""
         if fun is None:
-            value_heading_cache += "<h3>Summary</h3>"
+            heading = "<h3>Summary</h3>"
         else:
             try:
                 heading = "{} (Calls: {}, Time: {})"
@@ -180,13 +159,13 @@ class IProfile(DOMWidget):
                                          self.cprofile_tree[fun]['callcount'],
                                          self.cprofile_tree[fun]['totaltime'])
                 heading = html_escape(heading)
-                value_heading_cache += "<h3>" + heading + "</h3>"
-                value_heading_cache += ("<p>From file: " +
-                                        html_escape(fun.co_filename) + "</p>")
+                heading = "<h3>" + heading + "</h3>"
+                heading += ("<p>From file: " +
+                            html_escape(fun.co_filename) + "</p>")
             except AttributeError:
-                value_heading_cache += "<h3>" + html_escape(fun) + "</h3>"
+                heading = "<h3>" + html_escape(fun) + "</h3>"
 
-        self.value_heading = value_heading_cache
+        self.value_heading = heading
 
     def generate_table(self, fun):
         """
@@ -240,6 +219,10 @@ class IProfile(DOMWidget):
             # First run
             self.init_bokeh_table()
         else:
+            if fun is None:
+                self.bokeh_table.height = 27 + 25 * 20
+            else:
+                self.bokeh_table.height = 27 + 25 * min(10, len(calls))
             push_notebook()
 
     def init_bokeh_table(self):
@@ -282,8 +265,9 @@ class IProfile(DOMWidget):
                                              # to be broken in firefox and
                                              # chrome.
                                              width=620,
-                                             height=200,
-                                             selectable=False)
+                                             height=27 + 15 * 25,
+                                             selectable=False,
+                                             row_headers=False)
 
         self.bokeh_table = bokeh_table
 
