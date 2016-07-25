@@ -419,7 +419,10 @@ else:
 class IProfilerMagics(Magics):
     @line_cell_magic
     def iprofile(self, line, cell=None):
-        import iprofiler._line_profiler as _line_profiler
+        try:
+            import iprofiler._line_profiler as _line_profiler
+        except ImportError:
+            import _line_profiler
         import cProfile
         cprofiler = cProfile.Profile()
         lprofiler = _line_profiler.LineProfiler()
