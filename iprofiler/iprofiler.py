@@ -1,3 +1,5 @@
+from __future__ import absolute_import
+
 from IPython.utils import openpy
 from IPython.utils import ulinecache
 from IPython.core.magic import (Magics, magics_class, line_cell_magic)
